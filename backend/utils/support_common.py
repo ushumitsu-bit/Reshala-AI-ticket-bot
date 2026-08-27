@@ -142,7 +142,7 @@ def build_support_header(user_info: dict, balance_data: dict, is_suspicious: boo
     if section == "profile" and user:
         header_lines.append("👤 <b>ПРОФИЛЬ</b>")
         header_lines.append("")
-        header_lines.append(f"🆔 <b>UUID:</b> <code>{user.get('uuid', '—')}</code>")
+        header_lines.append(f"🆔 <b>UUID:</b> <code>{user.get('vlessUuid') or user.get('uuid') or '—'}</code>")
         header_lines.append(f"📝 <b>Short UUID:</b> <code>{user.get('shortUuid', '—')}</code>")
         header_lines.append(f"🔢 <b>ID:</b> {user.get('id', '—')}")
         header_lines.append(f"👤 <b>Username:</b> @{user.get('username', '—')}")
@@ -308,7 +308,7 @@ def format_user_context(user_data: dict, balance_data: dict = None, has_provided
         "## ДАННЫЕ ТЕКУЩЕГО ПОЛЬЗОВАТЕЛЯ:",
         f"- Username: @{user.get('username', 'не указан')}",
         f"- Telegram ID: {user.get('telegramId', 'N/A')}",
-        f"- UUID: {user.get('uuid', 'N/A')}",
+        f"- UUID: {user.get('vlessUuid') or user.get('uuid') or 'N/A'}",
         f"- Статус подписки: {user.get('status', 'UNKNOWN')}",
     ]
     

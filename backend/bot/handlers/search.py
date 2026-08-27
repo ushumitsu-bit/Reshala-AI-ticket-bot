@@ -29,41 +29,67 @@ def format_bytes(b):
     return f"{n:.2f} PB"
 
 
-def _search_user(api_url, token, query):
+def _list_users(api_url, token):
+    """Remnawave v3: GET /api/users (offset-pagination). Returns full user list."""
     headers = {"Authorization": f"Bearer {token}"}
-    user = None
-    if query.isdigit():
-        try:
-            r = requests.get(f"{api_url}/api/users/by-telegram-id/{query}", headers=headers, timeout=10)
-            if r.status_code == 200:
-                raw = r.json().get("response")
-                if isinstance(raw, list):
-                    user = raw[0] if raw else None
-                elif isinstance(raw, dict) and raw.get("uuid"):
-                    user = raw
-        except Exception as e:
-            logger.warning("search by tg id: %s", e)
-    else:
-        username = query.lstrip("@")
-        try:
-            r = requests.get(f"{api_url}/api/users/by-username/{username}", headers=headers, timeout=10)
-            if r.status_code == 200:
-                user = r.json().get("response")
-        except Exception as e:
-            logger.warning("search by username: %s", e)
-    return user
+    users = []
+    start = 0
+    size = 1000
+    try:
+        while True:
+            r = requests.get(
+                f"{api_url}/api/users",
+                headers=headers,
+                params={"start": start, "size": size},
+                timeout=20,
+            )
+            if r.status_code != 200:
+                break
+            payload = r.json().get("response", {})
+            batch = payload.get("users", []) if isinstance(payload, dict) else payload
+            if not batch:
+                break
+            users.extend(batch)
+            total = payload.get("total", 0) if isinstance(payload, dict) else len(users)
+            if len(users) >= total or len(batch) < size:
+                break
+            start += size
+    except Exception as e:
+        logger.warning("list users: %s", e)
+    return users
+
+
+def _search_user(api_url, token, query):
+    users = _list_users(api_url, token)
+    q = query.strip().lstrip("@").lower()
+    for u in users:
+        tg = str(u.get("telegramId") or "").strip()
+        short = (u.get("shortUuid") or "").strip().lower()
+        vless = (u.get("vlessUuid") or "").strip().lower()
+        username = (u.get("username") or "").strip().lower()
+        description = (u.get("description") or "").lower()
+        if (
+            q == tg
+            or q == short
+            or q == vless
+            or q == username
+            or (q and f"@{q}" in description)
+        ):
+            return u
+    return None
 
 
 def _format_user_card(user):
     status = (user.get("status") or "UNKNOWN").upper()
-    emoji = "✅" if status == "ACTIVE" else "❌" if status == "DISABLED" else "⏸"
+    emoji = "✅" if status == "ACTIVE" else "❌" if status in ("DISABLED", "LIMITED", "EXPIRED") else "⏸"
     username_str = f"@{user['username']}" if user.get("username") else "Не указан"
     tg_id = user.get("telegramId", "N/A")
+    uuid = user.get("vlessUuid") or user.get("uuid") or user.get("shortUuid") or "N/A"
 
-    ut = user.get("userTraffic", {})
-    used = format_bytes(ut.get("usedTrafficBytes", 0)) if ut else "N/A"
+    ut = user.get("userTraffic") or {}
+    used = format_bytes(ut.get("usedTrafficBytes", 0)) if isinstance(ut, dict) and ut else "N/A"
     limit_bytes = user.get("trafficLimitBytes", 0)
-    limit_str = format_bytes(limit_bytes) if limit_bytes > 0 else "Безлимит"
+    limit_str = format_bytes(limit_bytes) if limit_bytes and limit_bytes > 0 else "Безлимит"
 
     expire = user.get("expireAt", "N/A")
     if expire and expire != "N/A":
@@ -76,7 +102,7 @@ def _format_user_card(user):
 
     text = (
         f"{emoji} <b>Пользователь</b>\n\n"
-        f"<b>UUID:</b> <code>{user.get('uuid', 'N/A')}</code>\n"
+        f"<b>UUID:</b> <code>{uuid}</code>\n"
         f"<b>Short:</b> <code>{user.get('shortUuid', 'N/A')}</code>\n"
         f"<b>Username:</b> {username_str}\n"
         f"<b>Telegram ID:</b> {tg_id}\n"
@@ -87,21 +113,22 @@ def _format_user_card(user):
     return text
 
 
-def _user_actions_keyboard(uuid, status):
+def _user_actions_keyboard(user_id, status):
+    user_id = str(user_id or "")
     is_disabled = (status or "").upper() == "DISABLED"
     buttons = [
         [
-            InlineKeyboardButton("🔄 Сброс трафика", callback_data=f"act:reset_traffic:{uuid}"),
-            InlineKeyboardButton("📋 Перевыпуск", callback_data=f"act:revoke_sub:{uuid}"),
+            InlineKeyboardButton("🔄 Сброс трафика", callback_data=f"act:reset_traffic:{user_id}"),
+            InlineKeyboardButton("📋 Перевыпуск", callback_data=f"act:revoke_sub:{user_id}"),
         ],
         [
-            InlineKeyboardButton("🗑 Все HWID", callback_data=f"act:hwid_del_all:{uuid}"),
+            InlineKeyboardButton("🗑 Все HWID", callback_data=f"act:hwid_del_all:{user_id}"),
         ],
     ]
     if is_disabled:
-        buttons[1].append(InlineKeyboardButton("✅ Разблокировать", callback_data=f"act:enable:{uuid}"))
+        buttons[1].append(InlineKeyboardButton("✅ Разблокировать", callback_data=f"act:enable:{user_id}"))
     else:
-        buttons[1].append(InlineKeyboardButton("🚫 Заблокировать", callback_data=f"act:disable:{uuid}"))
+        buttons[1].append(InlineKeyboardButton("🚫 Заблокировать", callback_data=f"act:disable:{user_id}"))
     return InlineKeyboardMarkup(buttons)
 
 
@@ -139,6 +166,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return True
 
     text = _format_user_card(user)
-    keyboard = _user_actions_keyboard(user.get("uuid", ""), user.get("status", ""))
+    keyboard = _user_actions_keyboard(user.get("id", ""), user.get("status", ""))
     await msg.edit_text(text, parse_mode='HTML', reply_markup=keyboard)
     return True

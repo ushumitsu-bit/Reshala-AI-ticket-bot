@@ -37,7 +37,7 @@ def _api_post(path: str, body=None):
 @router.post("/reset-traffic")
 @limiter.limit("10/minute")
 def reset_traffic(request: Request, data: dict = Body(...)):
-    uuid = data.get("userUuid", "").strip()
+    uuid = str(data.get("userUuid", "")).strip()
     if not uuid:
         return {"ok": False, "error": "userUuid required"}
     ok, msg = _api_post(f"/api/users/{uuid}/actions/reset-traffic")
@@ -47,7 +47,7 @@ def reset_traffic(request: Request, data: dict = Body(...)):
 @router.post("/revoke-subscription")
 @limiter.limit("10/minute")
 def revoke_sub(request: Request, data: dict = Body(...)):
-    uuid = data.get("userUuid", "").strip()
+    uuid = str(data.get("userUuid", "")).strip()
     if not uuid:
         return {"ok": False, "error": "userUuid required"}
     ok, msg = _api_post(f"/api/users/{uuid}/actions/revoke")
@@ -57,7 +57,7 @@ def revoke_sub(request: Request, data: dict = Body(...)):
 @router.post("/enable-user")
 @limiter.limit("10/minute")
 def enable_user(request: Request, data: dict = Body(...)):
-    uuid = data.get("userUuid", "").strip()
+    uuid = str(data.get("userUuid", "")).strip()
     if not uuid:
         return {"ok": False, "error": "userUuid required"}
     ok, msg = _api_post(f"/api/users/{uuid}/actions/enable")
@@ -67,7 +67,7 @@ def enable_user(request: Request, data: dict = Body(...)):
 @router.post("/disable-user")
 @limiter.limit("10/minute")
 def disable_user(request: Request, data: dict = Body(...)):
-    uuid = data.get("userUuid", "").strip()
+    uuid = str(data.get("userUuid", "")).strip()
     if not uuid:
         return {"ok": False, "error": "userUuid required"}
     ok, msg = _api_post(f"/api/users/{uuid}/actions/disable")
@@ -77,19 +77,27 @@ def disable_user(request: Request, data: dict = Body(...)):
 @router.post("/hwid-delete-all")
 @limiter.limit("10/minute")
 def hwid_delete_all(request: Request, data: dict = Body(...)):
-    uuid = data.get("userUuid", "").strip()
+    uuid = str(data.get("userUuid", "")).strip()
     if not uuid:
         return {"ok": False, "error": "userUuid required"}
-    ok, msg = _api_post("/api/hwid/devices/delete-all", {"userUuid": uuid})
+    try:
+        user_id = int(uuid)
+    except (TypeError, ValueError):
+        return {"ok": False, "error": "invalid userUuid"}
+    ok, msg = _api_post("/api/hwid/devices/delete-all", {"userId": user_id})
     return {"ok": ok, "message": "Все устройства удалены." if ok else msg}
 
 
 @router.post("/hwid-delete")
 @limiter.limit("10/minute")
 def hwid_delete(request: Request, data: dict = Body(...)):
-    uuid = data.get("userUuid", "").strip()
-    hwid = data.get("hwid", "").strip()
+    uuid = str(data.get("userUuid", "")).strip()
+    hwid = str(data.get("hwid", "")).strip()
     if not uuid or not hwid:
         return {"ok": False, "error": "userUuid and hwid required"}
-    ok, msg = _api_post("/api/hwid/devices/delete", {"userUuid": uuid, "hwid": hwid})
+    try:
+        user_id = int(uuid)
+    except (TypeError, ValueError):
+        return {"ok": False, "error": "invalid userUuid"}
+    ok, msg = _api_post("/api/hwid/devices/delete", {"userId": user_id, "hwid": hwid})
     return {"ok": ok, "message": "Устройство удалено." if ok else msg}

@@ -328,7 +328,7 @@ async def support_action_callback(update: Update, context: ContextTypes.DEFAULT_
 
     # Remnawave actions
     user_info = client_data.get("user", {})
-    user_uuid = user_info.get("uuid")
+    user_uuid = user_info.get("id")
     
     if not user_uuid:
         await query.answer("Пользователь не найден в системе.", show_alert=True)

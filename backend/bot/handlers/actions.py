@@ -127,15 +127,25 @@ async def confirm_action_callback(update: Update, context: ContextTypes.DEFAULT_
         result_text = "✅ Пользователь заблокирован!" if ok else f"❌ Ошибка: {msg}"
     
     elif action == "hwid_del_all":
-        ok, msg = await asyncio.to_thread(_api_post, config, "/api/hwid/devices/delete-all", {"userUuid": uuid})
-        result_text = "✅ Все устройства удалены!" if ok else f"❌ Ошибка: {msg}"
+        try:
+            user_id = int(uuid)
+        except (TypeError, ValueError):
+            result_text = "❌ Неверные данные"
+        else:
+            ok, msg = await asyncio.to_thread(_api_post, config, "/api/hwid/devices/delete-all", {"userId": user_id})
+            result_text = "✅ Все устройства удалены!" if ok else f"❌ Ошибка: {msg}"
     
     elif action == "hwid_del":
-        # hwid_del требует uuid:hwid
+        # hwid_del требует userId:hwid
         if ":" in uuid:
-            real_uuid, hwid = uuid.split(":", 1)
-            ok, msg = await asyncio.to_thread(_api_post, config, "/api/hwid/devices/delete", {"userUuid": real_uuid, "hwid": hwid})
-            result_text = "✅ Устройство удалено!" if ok else f"❌ Ошибка: {msg}"
+            real_id, hwid = uuid.split(":", 1)
+            try:
+                user_id = int(real_id)
+            except (TypeError, ValueError):
+                result_text = "❌ Неверные данные"
+            else:
+                ok, msg = await asyncio.to_thread(_api_post, config, "/api/hwid/devices/delete", {"userId": user_id, "hwid": hwid})
+                result_text = "✅ Устройство удалено!" if ok else f"❌ Ошибка: {msg}"
         else:
             result_text = "❌ Неверные данные"
     

@@ -19,6 +19,83 @@ def _get_remnawave_config():
     return (settings.get("remnawave_api_url") or "").rstrip("/"), settings.get("remnawave_api_token", "")
 
 
+def format_bytes(b):
+    n = float(b or 0)
+    for u in ['B', 'KB', 'MB', 'GB', 'TB']:
+        if n < 1024:
+            return f"{n:.2f} {u}"
+        n /= 1024
+    return f"{n:.2f} PB"
+
+
+def _list_users(api_url, headers):
+    """Remnawave v3: GET /api/users (offset-pagination)."""
+    users = []
+    start = 0
+    size = 1000
+    try:
+        while True:
+            r = requests.get(f"{api_url}/api/users", headers=headers, params={"start": start, "size": size}, timeout=20)
+            if r.status_code != 200:
+                break
+            payload = r.json().get("response", {})
+            batch = payload.get("users", []) if isinstance(payload, dict) else payload
+            if not batch:
+                break
+            users.extend(batch)
+            total = payload.get("total", 0) if isinstance(payload, dict) else len(users)
+            if len(users) >= total or len(batch) < size:
+                break
+            start += size
+    except Exception as e:
+        logger.warning(f"list users error: {e}")
+    return users
+
+
+def _find_user(users, query):
+    q = query.strip().lstrip("@").lower()
+    for u in users:
+        tg = str(u.get("telegramId") or "").strip()
+        short = (u.get("shortUuid") or "").strip().lower()
+        vless = (u.get("vlessUuid") or "").strip().lower()
+        username = (u.get("username") or "").strip().lower()
+        description = (u.get("description") or "").lower()
+        if (
+            q == tg
+            or q == short
+            or q == vless
+            or q == username
+            or (q and f"@{q}" in description)
+        ):
+            return u
+    return None
+
+
+def _build_subscription(user):
+    from datetime import datetime, timezone
+    status = (user.get("status") or "").upper()
+    ut = user.get("userTraffic") or {}
+    expire = user.get("expireAt")
+    days_left = None
+    if expire:
+        try:
+            exp = datetime.fromisoformat(expire.replace("Z", "+00:00"))
+            days_left = (exp - datetime.now(timezone.utc)).days
+        except Exception:
+            pass
+    limit = user.get("trafficLimitBytes", 0)
+    return {
+        "isFound": True,
+        "user": {
+            "daysLeft": days_left,
+            "trafficUsed": format_bytes(ut.get("usedTrafficBytes", 0)),
+            "trafficLimit": format_bytes(limit) if limit and limit > 0 else "Безлимит",
+            "isActive": status == "ACTIVE",
+            "userStatus": status,
+        },
+    }
+
+
 @router.post("")
 @limiter.limit("30/minute")
 def lookup_user(request: Request, data: dict = Body(...)):
@@ -29,22 +106,10 @@ def lookup_user(request: Request, data: dict = Body(...)):
     if not api_url or not api_token:
         return {"ok": False, "error": "remnawave_not_configured"}
     headers = {"Authorization": f"Bearer {api_token}"}
-    user = None
+
     try:
-        if query.isdigit():
-            r = requests.get(f"{api_url}/api/users/by-telegram-id/{query}", headers=headers, timeout=10)
-            if r.status_code == 200:
-                data_resp = r.json()
-                raw = data_resp.get("response")
-                if isinstance(raw, list):
-                    user = raw[0] if raw else None
-                elif isinstance(raw, dict) and raw.get("uuid"):
-                    user = raw
-        else:
-            username = query.lstrip("@")
-            r = requests.get(f"{api_url}/api/users/by-username/{username}", headers=headers, timeout=10)
-            if r.status_code == 200:
-                user = r.json().get("response")
+        users = _list_users(api_url, headers)
+        user = _find_user(users, query)
     except Exception as e:
         logger.warning(f"lookup error: {e}")
         return {"ok": False, "error": str(e)}
@@ -52,21 +117,19 @@ def lookup_user(request: Request, data: dict = Body(...)):
     if not user:
         return {"ok": False, "error": "user_not_found"}
 
-    user_uuid = user.get("uuid")
-    subscription = None
+    # Совместимость с фронтом: v3 использует vlessUuid вместо uuid
+    user.setdefault("uuid", user.get("vlessUuid") or user.get("shortUuid"))
+
+    user_id = user.get("id")
+    subscription = _build_subscription(user)
     hwid_devices = []
 
-    if user_uuid:
+    if user_id is not None:
         try:
-            r = requests.get(f"{api_url}/api/subscriptions/by-uuid/{user_uuid}", headers=headers, timeout=10)
+            r = requests.get(f"{api_url}/api/hwid/devices/{user_id}", headers=headers, timeout=10)
             if r.status_code == 200:
-                subscription = r.json().get("response")
-        except Exception:
-            pass
-        try:
-            r = requests.get(f"{api_url}/api/hwid/devices/{user_uuid}", headers=headers, timeout=10)
-            if r.status_code == 200:
-                hwid_devices = r.json().get("response", {}).get("devices", [])
+                resp = r.json().get("response", {})
+                hwid_devices = resp.get("devices", []) if isinstance(resp, dict) else []
         except Exception:
             pass
 

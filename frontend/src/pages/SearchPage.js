@@ -71,7 +71,7 @@ function ProfilePanel({ user }) {
   return (
     <div className="card animate-fade" data-testid="panel-profile">
       <div className="card-header"><span className="card-title">Профиль</span></div>
-      <CopyableField label="UUID" value={user.uuid} code />
+      <CopyableField label="UUID" value={user.vlessUuid || user.uuid} code />
       <CopyableField label="Short UUID" value={user.shortUuid} code />
       <CopyableField label="ID" value={user.id} />
       <DataRow label="Username" value={user.username ? `@${user.username}` : 'N/A'} />
@@ -381,7 +381,7 @@ export default function SearchPage({ settings, searchState, setSearchState, init
   };
 
   const user = result?.user;
-  const uuid = user?.uuid || '';
+  const uuid = user?.id ?? '';
   const telegramId = user?.telegramId || '';
   const isDisabled = (user?.status || '').toUpperCase() === 'DISABLED';
 

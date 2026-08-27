@@ -164,7 +164,7 @@ export default function TicketsPage({ settings, initData }) {
   };
 
   const user = selectedTicket?.user_data?.user;
-  const uuid = user?.uuid || '';
+  const uuid = user?.id ?? '';
   const isDisabled = (user?.status || '').toUpperCase() === 'DISABLED';
 
   if (loading) {
@@ -333,7 +333,7 @@ export default function TicketsPage({ settings, initData }) {
                         </div>
                         {expandedTicket === ticket.id && (
                           <div className="ticket-accordion-content animate-fade">
-                            <DataRow label="UUID" value={user.uuid} code />
+                            <DataRow label="UUID" value={user.vlessUuid || user.uuid} code />
                             <DataRow label="Username" value={user.username ? `@${user.username}` : '—'} />
                             <DataRow label="Статус" value={user.status} />
                             <DataRow label="Истекает" value={formatDate(user.expireAt)} />

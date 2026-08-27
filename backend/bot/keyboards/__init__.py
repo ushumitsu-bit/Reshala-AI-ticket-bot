@@ -53,7 +53,7 @@ def build_support_keyboard(client_id, user_info=None, balance_data=None, is_susp
     if nav_row3: rows.append(nav_row3)
     
     # Действия если пользователь найден
-    if user_info and user_info.get("uuid") and not is_suspicious:
+    if user_info and user_info.get("id") is not None and not is_suspicious:
         status = user_info.get("status", "").upper()
         is_disabled = status in ("DISABLED", "INACTIVE", "BANNED")
         
