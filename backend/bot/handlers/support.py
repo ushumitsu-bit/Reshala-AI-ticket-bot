@@ -31,12 +31,19 @@ async def dispatch_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     
     # Check if user is manager
-    if check_access(user_id):
+    is_manager = check_access(user_id)
+    if is_manager:
         # Lazy import to avoid circular dependency
         from bot.handlers.search import handle_message
         handled = await handle_message(update, context)
         if handled:
             return
+        # 3.4: менеджер, написавший не-lookup текст, не должен заводить тикет на себя
+        await update.message.reply_text(
+            "Это бот поддержки клиентов. Для поиска отправьте Telegram ID, @username или UUID.\n\n"
+            "Управление тикетами — в Mini App."
+        )
+        return
 
     config = get_settings()
     if config.get("support_group_id"):
