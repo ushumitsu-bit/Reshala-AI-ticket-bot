@@ -3,11 +3,12 @@ import asyncio
 from datetime import datetime, timezone
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
+from pymongo.errors import DuplicateKeyError
 from services.ai.manager import AIProviderManager
 
 from utils.support_common import (
     build_support_header, format_bytes, format_user_context, get_topic_name, 
-    check_access, should_escalate, detect_subscription_link, 
+    check_access, should_escalate, detect_subscription_link, esc,
     TOPIC_OPEN, TOPIC_ESCALATED, TOPIC_SUSPICIOUS, TOPIC_CLOSED
 )
 from utils.db_config import get_db, get_settings, get_support_group_id
@@ -16,6 +17,20 @@ from utils.remnawave_api import fetch_user_data
 from bot.keyboards import client_keyboard, build_support_keyboard, confirm_client_keyboard
 
 logger = logging.getLogger(__name__)
+
+# Защита от гонки создания топика на одного клиента
+_creation_locks = {}
+
+
+async def _get_creation_lock(user_id):
+    # Ограничиваем рост словаря: локи крошечные, но за долгую работу их накопится много.
+    if len(_creation_locks) > 1000:
+        _creation_locks.clear()
+    lock = _creation_locks.get(user_id)
+    if lock is None:
+        lock = asyncio.Lock()
+        _creation_locks[user_id] = lock
+    return lock
 
 # Helpers
 
@@ -90,7 +105,8 @@ async def get_ai_reply(context, user_message: str, user_id: int, user_name: str 
     try:
         # Берем все слова длиннее 3 символов из сообщения для поиска
         import re
-        search_words = [w.lower() for w in re.findall(r'\w+', user_message) if len(w) > 3]
+        raw_words = [w.lower() for w in re.findall(r'\w+', user_message) if len(w) > 3 and len(w) <= 50]
+        search_words = [re.escape(w) for w in raw_words[:10]]
         
         if search_words:
             # Ищем статьи, где есть хотя бы одно из слов в заголовке, контенте или категории
@@ -144,7 +160,7 @@ async def get_ai_reply(context, user_message: str, user_id: int, user_name: str 
     messages.append({"role": "user", "content": user_message})
     save_to_conversation(context, "user", user_message)
 
-    reply = ai_manager.chat(messages)
+    reply = await asyncio.to_thread(ai_manager.chat, messages)
     
     if reply:
         reply = filter_ai_thinking(reply)
@@ -262,61 +278,78 @@ async def handle_client_message(update: Update, context: ContextTypes.DEFAULT_TY
                 context.user_data["topic_id"] = thread_id
         
         if not thread_id:
-            user_data = await fetch_user_data(user_id)
-            balance_data = await fetch_bedolaga_balance(user_id)
-            
-            is_suspicious = user_data.get("not_found", False)
-            context.user_data["is_suspicious"] = is_suspicious
-            context.user_data["user_data_raw"] = user_data
-            context.user_data["balance_data"] = balance_data
-            context.user_data["has_provided_proof"] = False
-            
-            main_bot_username = config.get("main_bot_username", "")
-            context.user_data["user_context"] = format_user_context(user_data, balance_data, False, main_bot_username)
-            
-            topic_name = get_topic_name(user_name, "suspicious" if is_suspicious else "open")
-            
-            try:
-                topic = await context.bot.create_forum_topic(chat_id=support_group_id, name=topic_name[:128])
-                thread_id = topic.message_thread_id
-                context.user_data["topic_id"] = thread_id
-                
-                topic_by_client[user_id] = {"chat_id": support_group_id, "message_thread_id": thread_id, "topic_name": topic_name}
-                thread_to_client[(support_group_id, thread_id)] = user_id
-                
-                user_info = user_data.get("user", {})
-                support_clients[user_id] = {
-                    "user": user_info,
-                    "subscription": user_data.get("subscription"),
-                    "hwid_devices": user_data.get("devices", []),
-                    "bedolaga_user": balance_data,
-                    "is_suspicious": is_suspicious,
-                }
-                
-                header_user_info = user_info or {"username": user.username, "first_name": user.first_name, "id": user.id, "telegramId": user.id}
-                header = build_support_header(header_user_info, balance_data, is_suspicious)
-                
-                card_msg = await context.bot.send_message(chat_id=support_group_id, message_thread_id=thread_id, text=header, parse_mode="HTML", reply_markup=build_support_keyboard(user_id, user_info, balance_data, is_suspicious))
-                try: await context.bot.pin_chat_message(chat_id=support_group_id, message_id=card_msg.message_id) 
-                except: pass
-                
+            async with await _get_creation_lock(user_id):
+                existing_ticket = None
                 if db is not None:
-                    db.tickets.insert_one({
-                        "client_id": user_id,
-                        "client_name": user.first_name or user_name,
-                        "client_username": user.username,
-                        "topic_id": thread_id,
-                        "status": "suspicious" if is_suspicious else "open",
-                        "reason": "Пользователь не найден в системе" if is_suspicious else None,
-                        "user_data": user_data if not is_suspicious else None,
-                        "last_messages": [], "history": [], "attachments": [],
-                        "ai_disabled": False,
-                        "created_at": datetime.now(timezone.utc), "is_removed": False,
-                    })
-            except Exception as e:
-                logger.error(f"create topic: {e}")
-                await update.message.reply_text("Ошибка создания тикета.")
-                return
+                    existing_ticket = db.tickets.find_one({"client_id": user_id, "is_removed": {"$ne": True}, "status": {"$ne": "closed"}})
+
+                if existing_ticket and existing_ticket.get("topic_id"):
+                    thread_id = existing_ticket["topic_id"]
+                    context.user_data["topic_id"] = thread_id
+                    topic_by_client[user_id] = {"chat_id": support_group_id, "message_thread_id": thread_id, "topic_name": get_topic_name(user_name, existing_ticket.get("status"))}
+                    thread_to_client[(support_group_id, thread_id)] = user_id
+                    is_suspicious = existing_ticket.get("status") == "suspicious"
+                    context.user_data["is_suspicious"] = is_suspicious
+                    ai_disabled = existing_ticket.get("ai_disabled", False)
+                else:
+                    user_data = await fetch_user_data(user_id)
+                    balance_data = await fetch_bedolaga_balance(user_id)
+
+                    is_suspicious = user_data.get("not_found", False)
+                    context.user_data["is_suspicious"] = is_suspicious
+                    context.user_data["user_data_raw"] = user_data
+                    context.user_data["balance_data"] = balance_data
+                    context.user_data["has_provided_proof"] = False
+
+                    main_bot_username = config.get("main_bot_username", "")
+                    context.user_data["user_context"] = format_user_context(user_data, balance_data, False, main_bot_username)
+
+                    topic_name = get_topic_name(user_name, "suspicious" if is_suspicious else "open")
+
+                    try:
+                        topic = await context.bot.create_forum_topic(chat_id=support_group_id, name=topic_name[:128])
+                        thread_id = topic.message_thread_id
+                        context.user_data["topic_id"] = thread_id
+
+                        topic_by_client[user_id] = {"chat_id": support_group_id, "message_thread_id": thread_id, "topic_name": topic_name}
+                        thread_to_client[(support_group_id, thread_id)] = user_id
+
+                        user_info = user_data.get("user", {})
+                        support_clients[user_id] = {
+                            "user": user_info,
+                            "subscription": user_data.get("subscription"),
+                            "hwid_devices": user_data.get("devices", []),
+                            "bedolaga_user": balance_data,
+                            "is_suspicious": is_suspicious,
+                        }
+
+                        header_user_info = user_info or {"username": user.username, "first_name": user.first_name, "id": user.id, "telegramId": user.id}
+                        header = build_support_header(header_user_info, balance_data, is_suspicious)
+
+                        card_msg = await context.bot.send_message(chat_id=support_group_id, message_thread_id=thread_id, text=header, parse_mode="HTML", reply_markup=build_support_keyboard(user_id, user_info, balance_data, is_suspicious))
+                        try: await context.bot.pin_chat_message(chat_id=support_group_id, message_id=card_msg.message_id)
+                        except: pass
+
+                        if db is not None:
+                            try:
+                                db.tickets.insert_one({
+                                    "client_id": user_id,
+                                    "client_name": user.first_name or user_name,
+                                    "client_username": user.username,
+                                    "topic_id": thread_id,
+                                    "status": "suspicious" if is_suspicious else "open",
+                                    "reason": "Пользователь не найден в системе" if is_suspicious else None,
+                                    "user_data": user_data if not is_suspicious else None,
+                                    "last_messages": [], "history": [], "attachments": [],
+                                    "ai_disabled": False,
+                                    "created_at": datetime.now(timezone.utc), "is_removed": False,
+                                })
+                            except DuplicateKeyError:
+                                logger.warning(f"Duplicate active ticket for user {user_id}, reusing existing")
+                    except Exception as e:
+                        logger.error(f"create topic: {e}")
+                        await update.message.reply_text("Ошибка создания тикета.")
+                        return
 
     is_suspicious = context.user_data.get("is_suspicious", False)
     has_provided_proof = context.user_data.get("has_provided_proof", False)
@@ -327,7 +360,7 @@ async def handle_client_message(update: Update, context: ContextTypes.DEFAULT_TY
         if sub_link:
             proof_received = True
             if db is not None: db.tickets.update_one({"topic_id": thread_id}, {"$push": {"attachments": {"type": "subscription_link", "value": sub_link, "added_at": datetime.now(timezone.utc).isoformat()}}})
-            await context.bot.send_message(chat_id=support_group_id, message_thread_id=thread_id, text=f"📎 <b>Получена ссылка:</b>\n<code>{sub_link}</code>", parse_mode="HTML")
+            await context.bot.send_message(chat_id=support_group_id, message_thread_id=thread_id, text=f"📎 <b>Получена ссылка:</b>\n<code>{esc(sub_link)}</code>", parse_mode="HTML")
             
     if update.message.photo:
         proof_received = True
@@ -346,7 +379,7 @@ async def handle_client_message(update: Update, context: ContextTypes.DEFAULT_TY
         try: await context.bot.edit_forum_topic(chat_id=support_group_id, message_thread_id=thread_id, name=get_topic_name(user_name, "suspicious"))
         except: pass
         
-        await context.bot.send_message(chat_id=support_group_id, message_thread_id=thread_id, text=f"🚨 <b>ВНИМАНИЕ!</b> Пользователь @{user_name} не найден, но предоставил данные. Требуется проверка.", parse_mode="HTML")
+        await context.bot.send_message(chat_id=support_group_id, message_thread_id=thread_id, text=f"🚨 <b>ВНИМАНИЕ!</b> Пользователь @{esc(user_name)} не найден, но предоставил данные. Требуется проверка.", parse_mode="HTML")
         if db is not None: db.tickets.update_one({"topic_id": thread_id}, {"$set": {"status": "suspicious", "reason": "Пользователь не найден", "escalated_at": datetime.now(timezone.utc)}})
 
     # Сохраняем сообщение клиента в историю БД
@@ -355,7 +388,7 @@ async def handle_client_message(update: Update, context: ContextTypes.DEFAULT_TY
             db.tickets.update_one(
                 {"topic_id": thread_id},
                 {"$push": {"history": {
-                    "role": "user",
+                    "role": "client",
                     "content": text,
                     "timestamp": datetime.now(timezone.utc).isoformat()
                 }}}
@@ -363,7 +396,19 @@ async def handle_client_message(update: Update, context: ContextTypes.DEFAULT_TY
         except Exception as e:
             logger.warning(f"Failed to save client message to DB history: {e}")
 
-    await forward_media_to_support(update, context, support_group_id, thread_id, user_name)
+    media_kind, _media_file_id = await forward_media_to_support(update, context, support_group_id, thread_id, user_name)
+    if media_kind and media_kind != "text" and db is not None and thread_id:
+        try:
+            db.tickets.update_one(
+                {"topic_id": thread_id},
+                {"$push": {"history": {
+                    "role": "client",
+                    "content": f"[{media_kind}]",
+                    "timestamp": datetime.now(timezone.utc).isoformat()
+                }}}
+            )
+        except Exception as e:
+            logger.warning(f"Failed to save media placeholder to DB history: {e}")
 
     # ИИ отвечает ВСЕГДА, кроме случаев когда он явно отключен (ai_disabled)
     # ai_disabled устанавливается когда:
@@ -387,12 +432,12 @@ async def handle_client_message(update: Update, context: ContextTypes.DEFAULT_TY
                 if not is_suspicious:
                     try: await context.bot.edit_forum_topic(chat_id=support_group_id, message_thread_id=thread_id, name=get_topic_name(user_name, "escalated"))
                     except: pass
-                    await context.bot.send_message(chat_id=support_group_id, message_thread_id=thread_id, text=f"🔥 <b>Эскалация</b>: AI не смог ответить.\nAI: {ai_reply[:300]}", parse_mode="HTML")
+                    await context.bot.send_message(chat_id=support_group_id, message_thread_id=thread_id, text=f"🔥 <b>Эскалация</b>: AI не смог ответить.\nAI: {esc(ai_reply[:300])}", parse_mode="HTML")
                     if db is not None: 
                         db.tickets.update_one({"topic_id": thread_id}, {"$set": {"status": "escalated", "escalated_at": datetime.now(timezone.utc)}})
                 else:
                     # Для подозрительных - просто уведомляем без смены статуса
-                    await context.bot.send_message(chat_id=support_group_id, message_thread_id=thread_id, text=f"⚠️ <b>AI не смог ответить подозрительному пользователю</b>\nAI: {ai_reply[:300]}", parse_mode="HTML")
+                    await context.bot.send_message(chat_id=support_group_id, message_thread_id=thread_id, text=f"⚠️ <b>AI не смог ответить подозрительному пользователю</b>\nAI: {esc(ai_reply[:300])}", parse_mode="HTML")
                 
                 # Отключаем ИИ после эскалации в БД
                 if db is not None:
@@ -464,7 +509,7 @@ async def call_manager_callback(update: Update, context: ContextTypes.DEFAULT_TY
             try: await context.bot.edit_forum_topic(chat_id=support_group_id, message_thread_id=thread_id, name=get_topic_name(user_name, "escalated"))
             except: pass
             
-        await context.bot.send_message(chat_id=support_group_id, message_thread_id=thread_id, text=f"🔥 <b>Клиент @{user_name} вызывает менеджера!</b>", parse_mode="HTML")
+        await context.bot.send_message(chat_id=support_group_id, message_thread_id=thread_id, text=f"🔥 <b>Клиент @{esc(user_name)} вызывает менеджера!</b>", parse_mode="HTML")
         
         # Меняем статус только если он НЕ подозрительный
         if db is not None:
@@ -481,55 +526,42 @@ async def call_manager_callback(update: Update, context: ContextTypes.DEFAULT_TY
 async def client_close_ticket_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer("Тикет закрыт.")
-    db = get_db()
     support_group_id = get_support_group_id()
     thread_id = context.user_data.get("topic_id")
-    is_suspicious = context.user_data.get("is_suspicious", False)
     user_id = query.from_user.id
-    user_name = query.from_user.username or str(user_id)
 
-    if support_group_id and thread_id:
-        logger.info(f"client_close_ticket_callback: group={support_group_id}, thread={thread_id}, suspicious={is_suspicious}")
-        if is_suspicious:
-            # Подозрительный тикет: не закрываем тему, сохраняем эмодзи 🚨
-            await context.bot.send_message(chat_id=support_group_id, message_thread_id=thread_id, text=f"✅ Клиент закрыл чат. Тикет остаётся для проверки!", parse_mode="HTML")
-            # Оставляем в БД с пометкой closed_at
-            if db is not None: 
-                db.tickets.update_one(
-                    {"topic_id": thread_id}, 
-                    {"$set": {"status": "suspicious", "closed_at": datetime.now(timezone.utc)}}
-                )
-        else:
-            # Обычный тикет: переименование → закрытие → сообщение
-            # 1. Переименовываем тему (используем 🟢 вместо ✅)
-            try:
-                new_name = get_topic_name(user_name, "closed")
-                await context.bot.edit_forum_topic(chat_id=support_group_id, message_thread_id=thread_id, name=new_name)
-                logger.info(f"Renamed topic {thread_id} to {new_name}")
-            except Exception as e:
-                logger.error(f"Failed to rename topic {thread_id}: {e}")
-            
-            # 2. Закрываем тему
-            try:
-                await context.bot.close_forum_topic(chat_id=support_group_id, message_thread_id=thread_id)
-                logger.info(f"Closed topic {thread_id}")
-            except Exception as e:
-                logger.error(f"Failed to close topic {thread_id}: {e}")
-            
-            # 3. Отправляем сообщение
-            await context.bot.send_message(chat_id=support_group_id, message_thread_id=thread_id, text=f"✅ <b>Тикет закрыт клиентом.</b>", parse_mode="HTML")
+    # 3.4: защита от thread_id=None
+    if not thread_id:
+        clear_conversation(context)
+        context.user_data.pop("topic_id", None)
+        await query.edit_message_reply_markup(reply_markup=None)
+        await query.message.reply_text("Тикет уже закрыт.")
+        return
 
-            
-            # 4. Удаляем из БД
-            if db is not None: 
-                db.tickets.delete_one({"topic_id": thread_id})
+    db = get_db()
+    if db is None:
+        await query.message.reply_text("База данных недоступна. Попробуйте позже.")
+        return
 
-    if "support_topic_by_client" in context.application.bot_data: context.application.bot_data["support_topic_by_client"].pop(user_id, None)
-    if "support_thread_to_client" in context.application.bot_data: context.application.bot_data["support_thread_to_client"].pop((support_group_id, thread_id), None)
-    
+    from services.telegram_service import TelegramService
+    from services.ticket_service import TicketService
+    telegram_service = TelegramService(bot=context.bot)
+    ticket_service = TicketService(db, telegram_service, support_group_id)
+
+    result = await ticket_service.close_ticket(thread_id, actor="client", actor_id=user_id)
+
+    if not result.get("ok"):
+        await query.message.reply_text(f"Не удалось закрыть тикет: {result.get('error', 'ошибка')}")
+        return
+
+    if "support_topic_by_client" in context.application.bot_data:
+        context.application.bot_data["support_topic_by_client"].pop(user_id, None)
+    if "support_thread_to_client" in context.application.bot_data:
+        context.application.bot_data["support_thread_to_client"].pop((support_group_id, thread_id), None)
+
     clear_conversation(context)
     context.user_data.pop("topic_id", None)
-    
+
     await query.edit_message_reply_markup(reply_markup=None)
     await query.message.reply_text("Тикет закрыт. Если нужна помощь — пишите снова.")
 

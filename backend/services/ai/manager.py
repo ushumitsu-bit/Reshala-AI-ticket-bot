@@ -19,7 +19,7 @@ EMERGENT_LLM_KEY = None
 try:
     from emergentintegrations.llm.chat import LlmChat, UserMessage
     import os
-    EMERGENT_LLM_KEY = os.environ.get("EMERGENT_LLM_KEY", "sk-emergent-f2c59A63a8639De58B")
+    EMERGENT_LLM_KEY = os.environ.get("EMERGENT_LLM_KEY")
 except ImportError:
     logger.warning("emergentintegrations not available, using direct API calls")
 
@@ -331,7 +331,10 @@ class AIProviderManager:
         url = f"{base_url}/chat/completions"
         headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
         payload = {"model": model, "messages": messages, "temperature": 0.7, "max_tokens": 2048}
-        r = requests.post(url, json=payload, headers=headers, timeout=60, proxies=proxies)
+        try:
+            r = requests.post(url, json=payload, headers=headers, timeout=60, proxies=proxies)
+        except requests.exceptions.RequestException as e:
+            raise Exception(f"Request failed: {e}")
         if r.status_code == 200:
             data = r.json()
             choices = data.get("choices", [])
@@ -340,6 +343,8 @@ class AIProviderManager:
                 return content.strip() if content else None
         if r.status_code in (429, 402, 403):
             raise Exception(f"Key limit/auth error: {r.status_code}")
+        if r.status_code >= 500:
+            raise Exception(f"Server error: {r.status_code}")
         logger.warning(f"OpenAI-compat {model}: {r.status_code} {r.text[:200]}")
         return None
 

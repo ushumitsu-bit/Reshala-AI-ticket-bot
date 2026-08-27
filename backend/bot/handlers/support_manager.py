@@ -4,31 +4,15 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 from utils.support_common import (
-    build_support_header, check_access, get_support_chat_ids, TOPIC_CLOSED
+    build_support_header, check_access, get_support_chat_ids, TOPIC_CLOSED, esc
 )
 from utils.db_config import get_db, get_settings, get_support_group_id
 from utils.bedolaga_api import fetch_bedolaga_balance, fetch_bedolaga_transactions
 from utils.remnawave_api import remnawave_action
 from services.ticket_service import TicketService
-from bot.keyboards import manager_keyboard, build_support_keyboard
+from bot.keyboards import build_support_keyboard
 
 logger = logging.getLogger(__name__)
-
-async def rename_topic(bot, chat_id: int, thread_id: int, prefix: str):
-    """Переименовывает топик, добавляя префикс (если его там нет)"""
-    try:
-        # К сожалению, get_forum_topic нет в открытом API? 
-        # Обычно храним имя в bot_data, но если нет — пробуем редактировать
-        # Тут мы просто пытаемся добавить префикс.
-        # В идеале нужно знать старое имя. 
-        pass 
-        # Telegram Bot API позволяет editForumTopic(name=...)
-        # Мы не знаем текущее имя, поэтому это сложный момент.
-        # В оригинальном коде логика была такая:
-        # Пробуем получить имя из bot_data["support_topic_by_client"] если есть
-        pass
-    except Exception as e:
-        logger.warning(f"rename_topic error: {e}")
 
 async def handle_support_group_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработка ответов менеджеров в топике"""
@@ -69,19 +53,19 @@ async def handle_support_group_message(update: Update, context: ContextTypes.DEF
     try:
         sent = False
         if msg.text:
-            await context.bot.send_message(chat_id=client_id, text=f"👨‍💼 <b>Поддержка:</b>\n{text}", parse_mode="HTML")
+            await context.bot.send_message(chat_id=client_id, text=f"👨‍💼 <b>Поддержка:</b>\n{esc(text)}", parse_mode="HTML")
             sent = True
         elif msg.photo:
-            await context.bot.send_photo(chat_id=client_id, photo=msg.photo[-1].file_id, caption=f"👨‍💼 <b>Поддержка:</b>\n{text}" if text else None, parse_mode="HTML")
+            await context.bot.send_photo(chat_id=client_id, photo=msg.photo[-1].file_id, caption=f"👨‍💼 <b>Поддержка:</b>\n{esc(text)}" if text else None, parse_mode="HTML")
             sent = True
         elif msg.document:
-            await context.bot.send_document(chat_id=client_id, document=msg.document.file_id, caption=f"👨‍💼 <b>Поддержка:</b>\n{text}" if text else None, parse_mode="HTML")
+            await context.bot.send_document(chat_id=client_id, document=msg.document.file_id, caption=f"👨‍💼 <b>Поддержка:</b>\n{esc(text)}" if text else None, parse_mode="HTML")
             sent = True
         elif msg.voice:
             await context.bot.send_voice(chat_id=client_id, voice=msg.voice.file_id)
             sent = True
         elif msg.video:
-            await context.bot.send_video(chat_id=client_id, video=msg.video.file_id, caption=f"👨‍💼 <b>Поддержка:</b>\n{text}" if text else None, parse_mode="HTML")
+            await context.bot.send_video(chat_id=client_id, video=msg.video.file_id, caption=f"👨‍💼 <b>Поддержка:</b>\n{esc(text)}" if text else None, parse_mode="HTML")
             sent = True
         elif msg.video_note:
             await context.bot.send_video_note(chat_id=client_id, video_note=msg.video_note.file_id)
@@ -90,10 +74,10 @@ async def handle_support_group_message(update: Update, context: ContextTypes.DEF
             await context.bot.send_sticker(chat_id=client_id, sticker=msg.sticker.file_id)
             sent = True
         elif msg.audio:
-            await context.bot.send_audio(chat_id=client_id, audio=msg.audio.file_id, caption=f"👨‍💼 <b>Поддержка:</b>\n{text}" if text else None, parse_mode="HTML")
+            await context.bot.send_audio(chat_id=client_id, audio=msg.audio.file_id, caption=f"👨‍💼 <b>Поддержка:</b>\n{esc(text)}" if text else None, parse_mode="HTML")
             sent = True
         elif msg.animation:
-            await context.bot.send_animation(chat_id=client_id, animation=msg.animation.file_id, caption=f"👨‍💼 <b>Поддержка:</b>\n{text}" if text else None, parse_mode="HTML")
+            await context.bot.send_animation(chat_id=client_id, animation=msg.animation.file_id, caption=f"👨‍💼 <b>Поддержка:</b>\n{esc(text)}" if text else None, parse_mode="HTML")
             sent = True
 
         if sent and db is not None:
@@ -151,7 +135,7 @@ async def close_ticket_callback(update: Update, context: ContextTypes.DEFAULT_TY
     ticket_service = TicketService(db, telegram_service, support_group_id)
     
     # Используем сервис
-    result = await ticket_service.close_ticket(ticket_id, user_id=None, is_manager=True)
+    result = await ticket_service.close_ticket(ticket_id, actor="manager", actor_id=query.from_user.id)
     
     if result.get("ok"):
         support_group_id = get_support_group_id()

@@ -1,7 +1,25 @@
+import html
 import logging
 from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
+
+
+def esc(s):
+    """Экранирование строки для Telegram HTML parse_mode."""
+    if s is None:
+        return ""
+    return html.escape(str(s))
+
+
+_ROLE_ALIASES = {"user": "client", "assistant": "ai"}
+
+
+def normalize_role(role):
+    """Приводит роль реплики к единому набору: client | ai | manager."""
+    if not role:
+        return "client"
+    return _ROLE_ALIASES.get(role, role)
 
 
 TOPIC_OPEN = "💬"
@@ -25,8 +43,8 @@ import re
 
 def check_access(user_id):
     config = get_settings()
-    allowed = set(config.get("allowed_manager_ids", []))
-    return user_id in allowed
+    allowed = {str(x) for x in (config.get("allowed_manager_ids") or [])}
+    return str(user_id) in allowed
 
 def should_escalate(reply_text):
     if not reply_text:
