@@ -6,6 +6,7 @@ import SearchPage from './pages/SearchPage';
 import SettingsPage from './pages/SettingsPage';
 import ProvidersPage from './pages/ProvidersPage';
 import KnowledgePage from './pages/KnowledgePage';
+import KnowledgeSuggestionsPage from './pages/KnowledgeSuggestionsPage';
 import AIChatTestPage from './pages/AIChatTestPage';
 import TicketsPage from './pages/TicketsPage';
 import { ShieldX } from 'lucide-react';
@@ -33,6 +34,7 @@ function App() {
   const [accessDenied, setAccessDenied] = useState(false);
   const [telegramUser, setTelegramUser] = useState(null);
   const [initData, setInitData] = useState('');
+  const [pendingCount, setPendingCount] = useState(0);
 
   // Сохранение состояния поиска между вкладками
   const [searchState, setSearchState] = useState({
@@ -69,6 +71,18 @@ function App() {
     }
   }, []);
 
+  const fetchPendingCount = useCallback(async (dataStr) => {
+    try {
+      const headers = {};
+      if (dataStr) headers['X-Telegram-Init-Data'] = dataStr;
+      const r = await fetch(`${API}/api/kb-suggestions?status=pending`, { headers });
+      const data = await r.json();
+      setPendingCount((data.suggestions || []).length);
+    } catch (e) {
+      console.error('Suggestions fetch error:', e);
+    }
+  }, []);
+
   const checkAccess = useCallback((settingsData, userId) => {
     if (!settingsData || !userId) return false;
     const allowedIds = settingsData.allowed_manager_ids || [];
@@ -96,6 +110,7 @@ function App() {
 
       const settingsData = await fetchSettings(rawData);
       await fetchProviders(rawData);
+      await fetchPendingCount(rawData);
 
       if (tgUser?.id) {
         const hasAccess = checkAccess(settingsData, tgUser.id);
@@ -110,7 +125,7 @@ function App() {
     };
 
     init();
-  }, [fetchSettings, fetchProviders, checkAccess]);
+  }, [fetchSettings, fetchProviders, fetchPendingCount, checkAccess]);
 
   if (loading) {
     return (
@@ -133,7 +148,7 @@ function App() {
   return (
     <div className="app" data-testid="app-container">
       <Header settings={settings} telegramUser={telegramUser} />
-      <Navigation page={page} setPage={setPage} />
+      <Navigation page={page} setPage={setPage} pendingCount={pendingCount} />
       <main className="app-main">
         {/* Поиск — сохраняет состояние */}
         <div style={{ display: page === 'search' ? 'block' : 'none' }}>
@@ -165,6 +180,11 @@ function App() {
 
         {/* База знаний */}
         {page === 'knowledge' && <KnowledgePage initData={initData} />}
+
+        {/* Черновики (самообучение) */}
+        {page === 'suggestions' && (
+          <KnowledgeSuggestionsPage initData={initData} onReview={() => fetchPendingCount(initData)} />
+        )}
 
         {/* Настройки */}
         {page === 'settings' && (
