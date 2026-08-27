@@ -12,8 +12,8 @@ from utils.db_config import get_settings
 
 def _check_access(user_id):
     config = get_settings()
-    allowed = set(config.get("allowed_manager_ids", []))
-    return user_id in allowed
+    allowed = {str(x) for x in (config.get("allowed_manager_ids") or [])}
+    return str(user_id) in allowed
 
 
 async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -29,7 +29,7 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not mini_app_url and config.get("mini_app_domain"):
         mini_app_url = f"https://{config.get('mini_app_domain')}"
 
-    is_manager = user_id in set(allowed_managers)
+    is_manager = str(user_id) in {str(x) for x in (allowed_managers or [])}
 
     if not is_manager:
         # Обычный пользователь - меню по умолчанию

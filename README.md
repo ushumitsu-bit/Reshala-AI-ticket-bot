@@ -138,6 +138,8 @@ docker compose ps
 
 Должны работать 4 контейнера: `reshala-mongodb`, `reshala-backend`, `reshala-bot`, `reshala-frontend`.
 
+> ⚠️ **MongoDB с авторизацией (`--auth`).** Если вы обновляете уже существующую инсталляцию с заполненным volume `mongodb_data`, root-пользователь `MONGO_INITDB_ROOT_USERNAME`/`MONGO_INITDB_ROOT_PASSWORD` **не создаётся повторно** — либо создайте пользователя вручную в `mongosh`, либо укажите в `.env` те же креды, что уже есть в базе. Пароль `changeme` по умолчанию — **обязательно смените**.
+
 #### 5. Настройка Mini App в BotFather
 1. @BotFather -> `/mybots` -> Select Bot -> **Bot Settings** -> **Menu Button**.
 2. URL: `https://your-domain.com`.
@@ -231,7 +233,7 @@ Type=simple
 User=root
 WorkingDirectory=/opt/Reshala-AI-ticket-bot/backend
 EnvironmentFile=/opt/Reshala-AI-ticket-bot/.env
-ExecStart=/usr/bin/python3 server.py
+ExecStart=/usr/bin/python3 -m uvicorn server:app --host 0.0.0.0 --port 8001
 Restart=always
 
 [Install]

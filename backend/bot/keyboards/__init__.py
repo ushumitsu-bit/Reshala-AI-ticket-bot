@@ -19,13 +19,6 @@ def confirm_client_keyboard(action: str):
         ]
     ])
 
-def manager_keyboard(ticket_id="", is_suspicious=False):
-    """Простая клавиатура менеджера."""
-    buttons = [[InlineKeyboardButton("✅ Закрыть тикет", callback_data=f"close_ticket:{ticket_id}")]]
-    if is_suspicious:
-        buttons.append([InlineKeyboardButton("🗑 Убрать тикет", callback_data=f"remove_ticket:{ticket_id}")])
-    return InlineKeyboardMarkup(buttons)
-
 def build_support_keyboard(client_id, user_info=None, balance_data=None, is_suspicious=False, section="profile"):
     """Сложная клавиатура управления клиентом в топике поддержки."""
     rows = []

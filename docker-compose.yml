@@ -1,16 +1,18 @@
-version: '3.8'
-
 services:
   mongodb:
     image: mongo:7
     container_name: reshala-mongodb
     restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME:-admin}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD:-changeme}
+    command: mongod --auth
     volumes:
       - mongodb_data:/data/db
     networks:
       - reshala-network
     healthcheck:
-      test: [ "CMD", "mongosh", "--eval", "db.adminCommand('ping')" ]
+      test: [ "CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')", "--username", "${MONGO_INITDB_ROOT_USERNAME:-admin}", "--password", "${MONGO_INITDB_ROOT_PASSWORD:-changeme}", "--authenticationDatabase", "admin" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -27,7 +29,7 @@ services:
     container_name: reshala-backend
     restart: unless-stopped
     environment:
-      - MONGO_URL=${MONGO_URL:-mongodb://mongodb:27017}
+      - MONGO_URL=${MONGO_URL:-mongodb://admin:changeme@mongodb:27017}
       - DB_NAME=${DB_NAME:-reshala_support}
       - BOT_TOKEN=${BOT_TOKEN}
       - REMNAWAVE_API_URL=${REMNAWAVE_API_URL}
@@ -56,7 +58,7 @@ services:
     restart: unless-stopped
     command: python -m bot.main
     environment:
-      - MONGO_URL=${MONGO_URL:-mongodb://mongodb:27017}
+      - MONGO_URL=${MONGO_URL:-mongodb://admin:changeme@mongodb:27017}
       - DB_NAME=${DB_NAME:-reshala_support}
       - BOT_TOKEN=${BOT_TOKEN}
       - REMNAWAVE_API_URL=${REMNAWAVE_API_URL}

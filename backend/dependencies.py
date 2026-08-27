@@ -3,12 +3,25 @@ from utils.db_config import get_db, get_bot_token, get_support_group_id
 from services.telegram_service import TelegramService
 from services.ticket_service import TicketService
 
+# Кэш TelegramService по токену — избегаем утечки httpx-пула на каждый запрос.
+_telegram_service_cache = {}
+
+
+def _get_cached_telegram_service(token: str) -> TelegramService:
+    svc = _telegram_service_cache.get(token)
+    if svc is None:
+        svc = TelegramService(token)
+        _telegram_service_cache[token] = svc
+    return svc
+
+
 async def get_database():
     """Dependency for database connection."""
     db = get_db()
     if db is None:
         raise Exception("Database connection failed")
     yield db
+
 
 async def get_telegram_service():
     """Dependency for TelegramService."""
@@ -18,7 +31,7 @@ async def get_telegram_service():
         # If token is missing, Telegram features won't work.
         # Ideally return None so we can handle it gracefully in Service
         return None
-    return TelegramService(token)
+    return _get_cached_telegram_service(token)
 
 async def get_ticket_service(
     db = Depends(get_database),

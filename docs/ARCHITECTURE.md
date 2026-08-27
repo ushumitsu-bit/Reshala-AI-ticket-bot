@@ -24,11 +24,13 @@ Reshala Support — это модульная система, состоящая
 3.  **База Данных (MongoDB)**
     - **Роль:** Постоянное хранилище данных.
     - **Коллекции:**
-        - `tickets`: Тикеты поддержки.
+        - `tickets`: Активные тикеты поддержки.
+        - `ticket_archive`: Закрытые тикеты (транскрипт для аналитики/самообучения, поле `distilled`).
         - `users`: Профили пользователей и контекст.
         - `settings`: Настройки системы.
         - `ai_providers`: API ключи и модели AI.
         - `knowledge_base`: Статьи базы знаний.
+        - `kb_suggestions`: Черновики статей от AI для ревью менеджером.
 
 4.  **Reverse Proxy (Nginx)**
     - **Роль:** Внешняя точка входа, SSL, маршрутизация.
@@ -82,3 +84,16 @@ services:
 - **Mini App Auth:** Middleware `verify_telegram_auth` проверяет подпись `initData` от Telegram ключом бота.
 - **Защита API:** Rate limiting (лимиты запросов) на всех эндпоинтах.
 - **Окружение:** Чувствительные данные (токены, mongo url) в `.env`.
+
+## 📦 Закрытие и архив тикетов
+
+- Все 3 пути закрытия (кнопка менеджера, API `/close`, клиентский колбэк) идут через единый `TicketService.close_ticket(ticket_ref, actor)`.
+- При закрытии тикет **переносится в `ticket_archive`** (полный документ + `closed_at`, `closed_by`, `distilled: false`) и **удаляется из `tickets`**.
+- Исключение: подозрительный тикет (`suspicious`), закрытый клиентом — остаётся в `tickets` со статусом `suspicious` и `closed_at` (для проверки менеджером).
+- Архив хранит `history` для последующей дистилляции в базу знаний (Фаза 4).
+
+## 🤖 Самообучение (KB Distiller)
+
+- Фоновый воркер (`services/kb_distiller.py`, APScheduler) раз в `KB_DISTILL_INTERVAL_MIN` берёт из `ticket_archive` эскалированные тикеты с `distilled=false`.
+- Фильтр «стоит ли учиться», скраббинг PII, поиск похожих статей, LLM-«методист» → черновик в `kb_suggestions` (`status=pending`).
+- Менеджер подтверждает/правит/отклоняет через Mini App (`/api/kb-suggestions`). Автопубликации нет.
