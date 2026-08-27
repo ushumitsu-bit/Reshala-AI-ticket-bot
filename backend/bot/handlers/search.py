@@ -3,22 +3,21 @@
 Ищет по Telegram ID, short UUID, username
 """
 import re
+import asyncio
 import logging
 import requests
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 
+from utils.db_config import get_settings
+
 logger = logging.getLogger(__name__)
 
 
-def _get_config(context):
-    return context.application.bot_data.get("_config", {})
-
-
 def _check_access(user_id, context):
-    config = _get_config(context)
-    allowed = set(config.get("allowed_manager_ids", []))
-    return user_id in allowed
+    config = get_settings()
+    allowed = {str(x) for x in (config.get("allowed_manager_ids") or [])}
+    return str(user_id) in allowed
 
 
 def format_bytes(b):
@@ -112,7 +111,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not _check_access(user_id, context):
         return False
 
-    config = _get_config(context)
+    config = get_settings()
     query = (update.message.text or "").strip()
     if not query:
         return False
@@ -134,7 +133,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return True
 
     msg = await update.message.reply_text("🔍 Ищу пользователя...")
-    user = _search_user(api_url, api_token, query)
+    user = await asyncio.to_thread(_search_user, api_url, api_token, query)
     if not user:
         await msg.edit_text("Пользователь не найден.")
         return True

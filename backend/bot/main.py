@@ -13,7 +13,7 @@ from telegram.ext import (
     filters, PicklePersistence
 )
 
-from utils.db_config import get_db, get_settings
+from utils.db_config import get_settings
 from utils.support_common import get_support_chat_ids
 
 
@@ -26,10 +26,8 @@ from bot.handlers.support import (
     remove_ticket_callback, ask_call_manager_callback, ask_close_ticket_callback,
     cancel_client_action_callback, support_action_callback, support_nav_callback
 )
-from bot.handlers.settings import settings_command, settings_callback
 from bot.handlers.actions import (
-    action_callback, button_callback, support_card_callback, 
-    squad_assign_callback, confirm_action_callback, cancel_action_callback
+    action_callback, confirm_action_callback, cancel_action_callback
 )
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
@@ -55,12 +53,9 @@ async def post_init(application: Application) -> None:
     except Exception as e:
         logger.warning("post_init set_chat_menu_button: %s", e)
     
-    # Загружаем конфиг из MongoDB и сохраняем в bot_data
-    # НЕ сохраняем db — он не сериализуется!
-    config = get_settings()
-    if config:
-        application.bot_data["_config"] = config
-        logger.info(f"post_init: Loaded config, support_group_id={config.get('support_group_id')}")
+    # Конфиг НЕ кладём в bot_data — он сериализуется в pickle и утечёт токенами.
+    # Хендлеры читают настройки через get_settings() (TTL-кэш).
+    logger.info(f"post_init: Loaded config, support_group_id={config.get('support_group_id')}")
 
 
 def main():
@@ -87,16 +82,13 @@ def main():
         builder = builder.persistence(persistence)
     application = builder.build()
 
-    # Конфиг загружается в post_init, но также устанавливаем здесь для регистрации handlers
-    # НЕ сохраняем db в bot_data — он не сериализуется!
-    application.bot_data["_config"] = config
+    # Конфиг доступен хендлерам через get_settings() (TTL-кэш), а не через bot_data.
 
     # Регистрация обработчиков
     application.add_handler(CommandHandler("start", start_handler))
     application.add_handler(CommandHandler("help", help_handler))
     application.add_handler(CallbackQueryHandler(support_action_callback, pattern="^sup_act:"))
     application.add_handler(CallbackQueryHandler(support_nav_callback, pattern="^sup:"))
-    application.add_handler(CallbackQueryHandler(support_card_callback, pattern="^sup"))
     application.add_handler(CallbackQueryHandler(close_ticket_callback, pattern="^close_ticket:"))
     application.add_handler(CallbackQueryHandler(remove_ticket_callback, pattern="^remove_ticket:"))
     application.add_handler(CallbackQueryHandler(call_manager_callback, pattern="^call_manager$"))
@@ -105,11 +97,9 @@ def main():
     application.add_handler(CallbackQueryHandler(ask_close_ticket_callback, pattern="^ask_close_ticket$"))
     application.add_handler(CallbackQueryHandler(cancel_client_action_callback, pattern="^cancel_client_action$"))
     application.add_handler(CallbackQueryHandler(check_balance_callback, pattern="^check_balance$"))
-    application.add_handler(CallbackQueryHandler(squad_assign_callback, pattern="^squad"))
     application.add_handler(CallbackQueryHandler(confirm_action_callback, pattern="^confirm:"))
     application.add_handler(CallbackQueryHandler(cancel_action_callback, pattern="^cancel_action$"))
     application.add_handler(CallbackQueryHandler(action_callback, pattern="^(act:|hwid_del:)"))
-    application.add_handler(CallbackQueryHandler(button_callback, pattern="^s:"))
 
     support_content = (
         filters.TEXT | filters.PHOTO | filters.Document.ALL

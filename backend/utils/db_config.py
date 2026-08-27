@@ -1,5 +1,8 @@
 
 import os
+import copy
+import time
+import threading
 from pymongo import MongoClient
 import logging
 
@@ -11,9 +14,18 @@ logger = logging.getLogger(__name__)
 MONGO_URL = os.environ.get("MONGO_URL", "mongodb://localhost:27017")
 DB_NAME = os.environ.get("DB_NAME", "reshala_support")
 
+# TTL кэша настроек (секунды). Кэш избавляет от лишних запросов к Mongo на каждое
+# сообщение и от необходимости хранить секреты в bot_data/pickle (IMPROVEMENT_PLAN 0.2 / 2.5).
+SETTINGS_CACHE_TTL = float(os.environ.get("SETTINGS_CACHE_TTL", "60"))
+
 # Global client and db
 _client = None
 _db = None
+_db_lock = threading.Lock()
+
+# In-memory TTL cache for settings
+_settings_cache = {"data": None, "timestamp": 0.0}
+_settings_lock = threading.Lock()
 
 def get_db():
     """
@@ -22,21 +34,56 @@ def get_db():
     """
     global _client, _db
     if _db is None:
-        try:
-            _client = MongoClient(MONGO_URL)
-            _db = _client[DB_NAME]
-            # Verify connection
-            _client.admin.command('ping')
-            logger.info(f"Connected to MongoDB: {DB_NAME}")
-        except Exception as e:
-            logger.error(f"Failed to connect to MongoDB: {e}")
-            return None
+        with _db_lock:
+            if _db is None:
+                try:
+                    _client = MongoClient(MONGO_URL)
+                    _db = _client[DB_NAME]
+                    # Verify connection
+                    _client.admin.command('ping')
+                    logger.info(f"Connected to MongoDB: {DB_NAME}")
+                except Exception as e:
+                    logger.error(f"Failed to connect to MongoDB: {e}")
+                    _client = None
+                    _db = None
+                    return None
     return _db
+
+def invalidate_settings_cache():
+    """
+    Сбросить кэш настроек. Вызывать после изменения коллекции settings
+    (PUT /api/settings, тоглы в боте и т.п.).
+    """
+    with _settings_lock:
+        _settings_cache["data"] = None
+        _settings_cache["timestamp"] = 0.0
+
 
 def get_settings():
     """
-    Get the current settings from the database, falling back to environment variables.
-    This ensures that settings defined in .env are visible in the Mini App and can be overridden.
+    Получить настройки из Mongo с фолбэком на ENV.
+    Результат кэшируется на SETTINGS_CACHE_TTL секунд; возвращается копия,
+    чтобы вызывающий код не мог случайно изменить закэшированный объект.
+    """
+    now = time.monotonic()
+    with _settings_lock:
+        cached = _settings_cache["data"]
+        if cached is not None and (now - _settings_cache["timestamp"]) < SETTINGS_CACHE_TTL:
+            return copy.deepcopy(cached)
+
+    settings = _load_settings()
+
+    with _settings_lock:
+        _settings_cache["data"] = settings
+        _settings_cache["timestamp"] = time.monotonic()
+
+    return copy.deepcopy(settings)
+
+
+def _load_settings():
+    """
+    Загрузить настройки из БД и смержить с ENV (при необходимости записать ENV в БД).
+    Вызывается только при промахе кэша.
     """
     db = get_db()
     settings = {}

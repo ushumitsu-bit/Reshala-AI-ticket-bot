@@ -3,21 +3,21 @@
 
 Все критические действия требуют подтверждения через inline кнопки.
 """
+import asyncio
 import logging
 import requests
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 
+from utils.db_config import get_settings
+
 logger = logging.getLogger(__name__)
 
 
-def _get_config(context):
-    return context.application.bot_data.get("_config", {})
-
-
 def _check_access(user_id, context):
-    config = _get_config(context)
-    return user_id in set(config.get("allowed_manager_ids", []))
+    config = get_settings()
+    allowed = {str(x) for x in (config.get("allowed_manager_ids") or [])}
+    return str(user_id) in allowed
 
 
 def _api_post(config, path, body=None):
@@ -105,36 +105,36 @@ async def confirm_action_callback(update: Update, context: ContextTypes.DEFAULT_
     
     action = parts[1]
     uuid = parts[2]
-    config = _get_config(context)
+    config = get_settings()
     
     result_text = ""
     ok = False
     
     if action == "reset_traffic":
-        ok, msg = _api_post(config, f"/api/users/{uuid}/actions/reset-traffic")
+        ok, msg = await asyncio.to_thread(_api_post, config, f"/api/users/{uuid}/actions/reset-traffic")
         result_text = "✅ Трафик успешно сброшен!" if ok else f"❌ Ошибка: {msg}"
     
     elif action == "revoke_sub":
-        ok, msg = _api_post(config, f"/api/users/{uuid}/actions/revoke")
+        ok, msg = await asyncio.to_thread(_api_post, config, f"/api/users/{uuid}/actions/revoke")
         result_text = "✅ Подписка перевыпущена!" if ok else f"❌ Ошибка: {msg}"
     
     elif action == "enable":
-        ok, msg = _api_post(config, f"/api/users/{uuid}/actions/enable")
+        ok, msg = await asyncio.to_thread(_api_post, config, f"/api/users/{uuid}/actions/enable")
         result_text = "✅ Пользователь разблокирован!" if ok else f"❌ Ошибка: {msg}"
     
     elif action == "disable":
-        ok, msg = _api_post(config, f"/api/users/{uuid}/actions/disable")
+        ok, msg = await asyncio.to_thread(_api_post, config, f"/api/users/{uuid}/actions/disable")
         result_text = "✅ Пользователь заблокирован!" if ok else f"❌ Ошибка: {msg}"
     
     elif action == "hwid_del_all":
-        ok, msg = _api_post(config, "/api/hwid/devices/delete-all", {"userUuid": uuid})
+        ok, msg = await asyncio.to_thread(_api_post, config, "/api/hwid/devices/delete-all", {"userUuid": uuid})
         result_text = "✅ Все устройства удалены!" if ok else f"❌ Ошибка: {msg}"
     
     elif action == "hwid_del":
         # hwid_del требует uuid:hwid
         if ":" in uuid:
             real_uuid, hwid = uuid.split(":", 1)
-            ok, msg = _api_post(config, "/api/hwid/devices/delete", {"userUuid": real_uuid, "hwid": hwid})
+            ok, msg = await asyncio.to_thread(_api_post, config, "/api/hwid/devices/delete", {"userUuid": real_uuid, "hwid": hwid})
             result_text = "✅ Устройство удалено!" if ok else f"❌ Ошибка: {msg}"
         else:
             result_text = "❌ Неверные данные"
@@ -194,24 +194,3 @@ async def action_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 parse_mode="HTML",
                 reply_markup=_confirm_keyboard("hwid_del", f"{uuid}:{hwid}")
             )
-
-
-async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработка inline кнопок навигации (s:section:...)."""
-    query = update.callback_query
-    if not _check_access(query.from_user.id, context):
-        await query.answer("Нет доступа.", show_alert=True)
-        return
-    await query.answer()
-
-
-async def support_card_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Callback для карточек поддержки."""
-    query = update.callback_query
-    await query.answer()
-
-
-async def squad_assign_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Callback для назначения сквадов (если используется)."""
-    query = update.callback_query
-    await query.answer("Функция сквадов")

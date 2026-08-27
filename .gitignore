@@ -137,3 +137,8 @@ cython_debug/
 # Tasks
 .tasks/
 
+# Bot persistence — may contain secrets (bot token, API keys, dialogs), never commit
+bot_data/*
+!bot_data/.gitkeep
+*.pickle
+
