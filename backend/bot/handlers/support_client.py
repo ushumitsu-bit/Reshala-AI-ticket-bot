@@ -331,21 +331,33 @@ async def handle_client_message(update: Update, context: ContextTypes.DEFAULT_TY
                         except: pass
 
                         if db is not None:
+                            ticket_doc = {
+                                "client_id": user_id,
+                                "client_name": user.first_name or user_name,
+                                "client_username": user.username,
+                                "topic_id": thread_id,
+                                "status": "suspicious" if is_suspicious else "open",
+                                "reason": "Пользователь не найден в системе" if is_suspicious else None,
+                                "user_data": user_data if not is_suspicious else None,
+                                "last_messages": [], "history": [], "attachments": [],
+                                "ai_disabled": False,
+                                "created_at": datetime.now(timezone.utc), "is_removed": False,
+                            }
                             try:
-                                db.tickets.insert_one({
-                                    "client_id": user_id,
-                                    "client_name": user.first_name or user_name,
-                                    "client_username": user.username,
-                                    "topic_id": thread_id,
-                                    "status": "suspicious" if is_suspicious else "open",
-                                    "reason": "Пользователь не найден в системе" if is_suspicious else None,
-                                    "user_data": user_data if not is_suspicious else None,
-                                    "last_messages": [], "history": [], "attachments": [],
-                                    "ai_disabled": False,
-                                    "created_at": datetime.now(timezone.utc), "is_removed": False,
-                                })
+                                db.tickets.insert_one(ticket_doc)
                             except DuplicateKeyError:
-                                logger.warning(f"Duplicate active ticket for user {user_id}, reusing existing")
+                                # Защита: старый «закрытый» тикет с is_removed=False блокирует
+                                # частичный уникальный индекс client_id. Помечаем его убранным
+                                # и повторяем вставку.
+                                logger.warning(f"Duplicate active ticket for user {user_id}, marking stale closed ticket removed and retrying")
+                                db.tickets.update_one(
+                                    {"client_id": user_id, "status": "closed"},
+                                    {"$set": {"is_removed": True, "removed_at": datetime.now(timezone.utc)}},
+                                )
+                                try:
+                                    db.tickets.insert_one(ticket_doc)
+                                except DuplicateKeyError:
+                                    logger.warning(f"Still duplicate active ticket for user {user_id}, reusing existing")
                     except Exception as e:
                         logger.error(f"create topic: {e}")
                         await update.message.reply_text("Ошибка создания тикета.")

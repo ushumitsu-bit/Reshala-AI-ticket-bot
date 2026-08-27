@@ -71,15 +71,24 @@ class TicketService:
         try:
             result = self.db.tickets.insert_one(ticket)
         except DuplicateKeyError:
-            existing = self.db.tickets.find_one({"client_id": client_id, "is_removed": {"$ne": True}})
-            if existing:
-                return {
-                    "ticket_id": str(existing["_id"]),
-                    "status": existing.get("status"),
-                    "topic_id": existing.get("topic_id"),
-                    "duplicate": True,
-                }
-            raise
+            # Защита: старый «закрытый» тикет с is_removed=False блокирует
+            # частичный уникальный индекс client_id. Помечаем его убранным и пробуем снова.
+            self.db.tickets.update_one(
+                {"client_id": client_id, "status": "closed"},
+                {"$set": {"is_removed": True, "removed_at": datetime.now(timezone.utc)}},
+            )
+            try:
+                result = self.db.tickets.insert_one(ticket)
+            except DuplicateKeyError:
+                existing = self.db.tickets.find_one({"client_id": client_id, "is_removed": {"$ne": True}})
+                if existing:
+                    return {
+                        "ticket_id": str(existing["_id"]),
+                        "status": existing.get("status"),
+                        "topic_id": existing.get("topic_id"),
+                        "duplicate": True,
+                    }
+                raise
         return {
             "ticket_id": str(result.inserted_id),
             "status": status,

@@ -43,7 +43,9 @@ def _list_users(api_url, token):
                 params={"start": start, "size": size},
                 timeout=20,
             )
+            logger.info("remnawave list users: url=%s/api/users status=%s", api_url, r.status_code)
             if r.status_code != 200:
+                logger.warning("remnawave list users non-200: %s", r.text[:300])
                 break
             payload = r.json().get("response", {})
             batch = payload.get("users", []) if isinstance(payload, dict) else payload
@@ -56,6 +58,7 @@ def _list_users(api_url, token):
             start += size
     except Exception as e:
         logger.warning("list users: %s", e)
+    logger.info("remnawave list users: loaded=%d", len(users))
     return users
 
 
