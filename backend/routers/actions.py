@@ -1,22 +1,21 @@
-from fastapi import APIRouter, Body
+from fastapi import APIRouter, Body, Depends, Request
 import requests
 import os
 import logging
 
-router = APIRouter()
+from middleware.auth import require_manager
+from middleware.rate_limit import limiter
+
+router = APIRouter(dependencies=[Depends(require_manager)])
 logger = logging.getLogger(__name__)
 
 
 def _get_api():
-    from pymongo import MongoClient
-    MONGO_URL = os.environ.get("MONGO_URL")
-    DB_NAME = os.environ.get("DB_NAME", "reshala_support")
-    client = MongoClient(MONGO_URL)
-    db = client[DB_NAME]
-    settings = db.settings.find_one({}, {"_id": 0})
+    from utils.db_config import get_settings
+    settings = get_settings()
     if not settings:
         return None, None
-    return settings.get("remnawave_api_url", "").rstrip("/"), settings.get("remnawave_api_token", "")
+    return (settings.get("remnawave_api_url") or "").rstrip("/"), settings.get("remnawave_api_token", "")
 
 
 def _api_post(path: str, body=None):
@@ -36,7 +35,8 @@ def _api_post(path: str, body=None):
 
 
 @router.post("/reset-traffic")
-def reset_traffic(data: dict = Body(...)):
+@limiter.limit("10/minute")
+def reset_traffic(request: Request, data: dict = Body(...)):
     uuid = data.get("userUuid", "").strip()
     if not uuid:
         return {"ok": False, "error": "userUuid required"}
@@ -45,7 +45,8 @@ def reset_traffic(data: dict = Body(...)):
 
 
 @router.post("/revoke-subscription")
-def revoke_sub(data: dict = Body(...)):
+@limiter.limit("10/minute")
+def revoke_sub(request: Request, data: dict = Body(...)):
     uuid = data.get("userUuid", "").strip()
     if not uuid:
         return {"ok": False, "error": "userUuid required"}
@@ -54,7 +55,8 @@ def revoke_sub(data: dict = Body(...)):
 
 
 @router.post("/enable-user")
-def enable_user(data: dict = Body(...)):
+@limiter.limit("10/minute")
+def enable_user(request: Request, data: dict = Body(...)):
     uuid = data.get("userUuid", "").strip()
     if not uuid:
         return {"ok": False, "error": "userUuid required"}
@@ -63,7 +65,8 @@ def enable_user(data: dict = Body(...)):
 
 
 @router.post("/disable-user")
-def disable_user(data: dict = Body(...)):
+@limiter.limit("10/minute")
+def disable_user(request: Request, data: dict = Body(...)):
     uuid = data.get("userUuid", "").strip()
     if not uuid:
         return {"ok": False, "error": "userUuid required"}
@@ -72,7 +75,8 @@ def disable_user(data: dict = Body(...)):
 
 
 @router.post("/hwid-delete-all")
-def hwid_delete_all(data: dict = Body(...)):
+@limiter.limit("10/minute")
+def hwid_delete_all(request: Request, data: dict = Body(...)):
     uuid = data.get("userUuid", "").strip()
     if not uuid:
         return {"ok": False, "error": "userUuid required"}
@@ -81,7 +85,8 @@ def hwid_delete_all(data: dict = Body(...)):
 
 
 @router.post("/hwid-delete")
-def hwid_delete(data: dict = Body(...)):
+@limiter.limit("10/minute")
+def hwid_delete(request: Request, data: dict = Body(...)):
     uuid = data.get("userUuid", "").strip()
     hwid = data.get("hwid", "").strip()
     if not uuid or not hwid:

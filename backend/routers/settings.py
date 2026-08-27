@@ -1,15 +1,14 @@
 from fastapi import APIRouter, Body, Depends
-from middleware.auth import verify_telegram_auth
+from middleware.auth import require_manager
 
 import sys
 import os
 
 # Add utils to path
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
-from utils.db_config import get_db, get_settings
+from utils.db_config import get_db, get_settings, invalidate_settings_cache
 
-router = APIRouter()
-db = get_db()
+router = APIRouter(dependencies=[Depends(require_manager)])
 
 
 def mask_secret(secret: str) -> str:
@@ -18,7 +17,7 @@ def mask_secret(secret: str) -> str:
     return secret[:4] + "***" + secret[-4:]
 
 @router.get("")
-def get_settings_endpoint(user_data: dict = Depends(verify_telegram_auth)):
+def get_settings_endpoint():
     doc = get_settings()
     if not doc:
         return {"error": "no settings"}
@@ -33,7 +32,10 @@ def get_settings_endpoint(user_data: dict = Depends(verify_telegram_auth)):
 
 
 @router.put("")
-def update_settings(data: dict = Body(...), user_data: dict = Depends(verify_telegram_auth)):
+def update_settings(data: dict = Body(...)):
+    db = get_db()
+    if db is None:
+        return {"ok": False, "error": "database unavailable"}
     protected = ["_id"]
     update = {}
     
@@ -48,11 +50,15 @@ def update_settings(data: dict = Body(...), user_data: dict = Depends(verify_tel
     if not update:
         return {"ok": False, "error": "nothing to update"}
     db.settings.update_one({}, {"$set": update})
+    invalidate_settings_cache()
     return {"ok": True}
 
 
 @router.get("/providers")
 def get_providers():
+    db = get_db()
+    if db is None:
+        return {"providers": []}
     providers = list(db.ai_providers.find({}, {"_id": 0}))
     for p in providers:
         keys = p.get("api_keys", [])
@@ -61,18 +67,26 @@ def get_providers():
     return {"providers": providers}
 
 
+ALLOWED_PROVIDER_FIELDS = {"enabled", "selected_model", "vision_model", "display_name", "models"}
+
+
 @router.put("/providers/{name}")
 def update_provider(name: str, data: dict = Body(...)):
-    protected = ["_id", "name"]
-    update = {k: v for k, v in data.items() if k not in protected}
+    db = get_db()
+    if db is None:
+        return {"ok": False, "error": "database unavailable"}
+    update = {k: v for k, v in data.items() if k in ALLOWED_PROVIDER_FIELDS}
     if not update:
-        return {"ok": False, "error": "nothing to update"}
+        return {"ok": False, "error": "nothing to update (allowed: enabled, selected_model, vision_model, display_name, models)"}
     db.ai_providers.update_one({"name": name}, {"$set": update})
     return {"ok": True}
 
 
 @router.post("/providers/{name}/keys")
 def add_provider_key(name: str, data: dict = Body(...)):
+    db = get_db()
+    if db is None:
+        return {"ok": False, "error": "database unavailable"}
     key = data.get("key", "").strip()
     if not key:
         return {"ok": False, "error": "key required"}
@@ -82,6 +96,9 @@ def add_provider_key(name: str, data: dict = Body(...)):
 
 @router.delete("/providers/{name}/keys/{index}")
 def remove_provider_key(name: str, index: int):
+    db = get_db()
+    if db is None:
+        return {"ok": False, "error": "database unavailable"}
     provider = db.ai_providers.find_one({"name": name})
     if not provider:
         return {"ok": False, "error": "provider not found"}

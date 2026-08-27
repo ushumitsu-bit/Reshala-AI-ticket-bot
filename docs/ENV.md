@@ -21,14 +21,21 @@
 | `MINI_APP_DOMAIN` | **Обязательно.** Домен, где хостится Mini App. | `api.example.com` |
 | `MINI_APP_URL` | Опционально. Прямой URL, если отличается от домена (для dev). | `http://localhost:3000` |
 | `SKIP_AUTH` | **Безопасность.** Ставить `true` ТОЛЬКО для локальной разработки. Отключает проверку `initData`. | `false` |
+| `TELEGRAM_INITDATA_TTL` | **Безопасность.** Время жизни `initData` в секундах (защита от replay). | `86400` |
+| `CORS_ORIGINS` | **Безопасность.** Разрешённые Origin для CORS через запятую. Обязателен для продакшена. | `https://app.example.com` |
 | `PERSISTENCE_PATH` | Путь к файлу сохранения состояния бота (pickle). | `/data/bot_state.pickle` |
 
 ## 📦 База Данных
 
 | Переменная | Описание | По умолчанию |
 |------------|----------|--------------|
-| `MONGO_URL` | Строка подключения MongoDB. <br>⚠️ **Docker:** Если не задано, используется `mongodb://mongodb:27017` (внутренняя сеть). Если задаете вручную для Docker — не используйте `localhost`! | `mongodb://mongodb:27017` |
+| `MONGO_URL` | Строка подключения MongoDB (с кредами). <br>⚠️ **Docker:** используйте `mongodb://user:pass@mongodb:27017`. | `mongodb://admin:changeme@mongodb:27017` |
 | `DB_NAME` | Имя базы данных. | `reshala_support` |
+| `SETTINGS_CACHE_TTL` | TTL кэша настроек (секунды). | `60` |
+| `MONGO_INITDB_ROOT_USERNAME` | Root-пользователь MongoDB (первый запуск контейнера). | `admin` |
+| `MONGO_INITDB_ROOT_PASSWORD` | Root-пароль MongoDB (первый запуск контейнера). | `changeme` |
+
+> ⚠️ **Миграция с существующим volume:** `MONGO_INITDB_ROOT_*` применяются только при первом запуске пустой базы. При апгрейде существующей инсталляции создайте root-пользователя в `mongosh` вручную или укажите уже существующие креды. Пароль по умолчанию `changeme` — смените обязательно.
 
 ## 💰 Bedolaga (Опционально)
 
@@ -38,6 +45,15 @@
 |------------|----------|
 | `BEDOLAGA_API_URL` | URL вебхука/API Bedolaga. |
 | `BEDOLAGA_API_TOKEN` | Токен API Bedolaga. |
+
+## 🤖 Самообучение (KB Distiller)
+
+| Переменная | Описание | По умолчанию |
+|------------|----------|--------------|
+| `KB_DISTILL_ENABLED` | Включить воркер дистилляции (`on`/`off`). При multi-worker — только на одном воркере. | `on` |
+| `KB_DISTILL_INTERVAL_MIN` | Интервал запуска дистилляции диалогов (минут). | `15` |
+| `KB_DISTILL_BATCH` | Сколько архивных тикетов обрабатывать за прогон. | `5` |
+| `KB_SUGGESTION_NOTIFY` | Уведомлять менеджеров о новых черновиках (`on`/`off`). | `on` |
 
 ## 🔐 Заметки по Деплою
 

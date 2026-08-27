@@ -1,27 +1,27 @@
-from fastapi import APIRouter, Body, Header
+from fastapi import APIRouter, Body, Depends, Request
 from typing import Optional
 import requests
 import os
 import logging
 
-router = APIRouter()
+from middleware.auth import require_manager
+from middleware.rate_limit import limiter
+
+router = APIRouter(dependencies=[Depends(require_manager)])
 logger = logging.getLogger(__name__)
 
 
 def _get_remnawave_config():
-    from pymongo import MongoClient
-    MONGO_URL = os.environ.get("MONGO_URL")
-    DB_NAME = os.environ.get("DB_NAME", "reshala_support")
-    client = MongoClient(MONGO_URL)
-    db = client[DB_NAME]
-    settings = db.settings.find_one({}, {"_id": 0})
+    from utils.db_config import get_settings
+    settings = get_settings()
     if not settings:
         return None, None
-    return settings.get("remnawave_api_url", "").rstrip("/"), settings.get("remnawave_api_token", "")
+    return (settings.get("remnawave_api_url") or "").rstrip("/"), settings.get("remnawave_api_token", "")
 
 
 @router.post("")
-def lookup_user(data: dict = Body(...)):
+@limiter.limit("30/minute")
+def lookup_user(request: Request, data: dict = Body(...)):
     query = (data.get("query") or "").strip()
     if not query:
         return {"ok": False, "error": "query_required"}

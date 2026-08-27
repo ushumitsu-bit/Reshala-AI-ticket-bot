@@ -19,11 +19,11 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 from services.ticket_service import TicketService
 from dependencies import get_ticket_service
 from middleware.rate_limit import limiter
-from middleware.auth import verify_telegram_auth
+from middleware.auth import require_manager
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(dependencies=[Depends(verify_telegram_auth)])
+router = APIRouter(dependencies=[Depends(require_manager)])
 
 def serialize_ticket(ticket):
     """Convert MongoDB document to JSON-serializable dict"""
@@ -125,8 +125,7 @@ async def close_ticket(
     ticket_service: TicketService = Depends(get_ticket_service)
 ):
     """Close ticket (✅) — переименовывает топик и закрывает его"""
-    # Используем сервис (is_manager=True подразумевается при вызове из API)
-    result = await ticket_service.close_ticket(ticket_id, user_id=None, is_manager=True)
+    result = await ticket_service.close_ticket(ticket_id, actor="manager")
     return result
 
 

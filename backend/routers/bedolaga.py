@@ -6,13 +6,16 @@ Bedolaga API Router — проверка баланса и история поп
 - Эндпоинт баланса: GET /users/{telegram_id}
 - Эндпоинт транзакций: GET /transactions?user_id={bedolaga_id}
 """
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, Request
+from middleware.auth import require_manager
+from middleware.rate_limit import limiter
 from utils.bedolaga_api import fetch_bedolaga_balance, fetch_bedolaga_transactions
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_manager)])
 
 @router.get("/balance/{telegram_id}")
-async def get_balance(telegram_id: int):
+@limiter.limit("30/minute")
+async def get_balance(request: Request, telegram_id: int):
     """Получить баланс пользователя через Bedolaga API"""
     data = await fetch_bedolaga_balance(telegram_id)
     
@@ -32,7 +35,8 @@ async def get_balance(telegram_id: int):
 
 
 @router.get("/deposits/{telegram_id}")
-async def get_deposits(telegram_id: int, limit: int = 30):
+@limiter.limit("30/minute")
+async def get_deposits(request: Request, telegram_id: int, limit: int = 30):
     """Получить историю транзакций (пополнений) пользователя"""
     # 1. Get user to find internal ID
     balance_data = await fetch_bedolaga_balance(telegram_id)

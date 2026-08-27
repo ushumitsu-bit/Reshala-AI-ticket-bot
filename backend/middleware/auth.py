@@ -2,12 +2,13 @@
 import hashlib
 import hmac
 import json
+import time
 import urllib.parse
 import os
 from typing import Dict, Optional
 
 from fastapi import Header, HTTPException, Depends, Request
-from utils.db_config import get_bot_token
+from utils.db_config import get_bot_token, get_settings
 
 async def verify_telegram_auth(
     x_telegram_init_data: Optional[str] = Header(None, alias="X-Telegram-Init-Data")
@@ -54,9 +55,43 @@ async def verify_telegram_auth(
         if calculated_hash != hash_value:
              raise HTTPException(status_code=403, detail="Invalid initData signature")
 
+        # Проверка свежести initData (защита от replay)
+        auth_date = data_dict.get("auth_date")
+        if auth_date:
+            try:
+                auth_ts = int(auth_date)
+            except (TypeError, ValueError):
+                raise HTTPException(status_code=401, detail="Invalid initData: auth_date")
+            ttl = int(os.environ.get("TELEGRAM_INITDATA_TTL", "86400"))
+            if time.time() - auth_ts > ttl:
+                raise HTTPException(status_code=403, detail="initData expired")
+
         # Parse user data if needed
         user_data = json.loads(data_dict.get("user", "{}"))
         return user_data
 
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=401, detail=f"Auth failed: {str(e)}")
+
+
+async def require_manager(user_data: dict = Depends(verify_telegram_auth)):
+    """
+    Проверяет, что пользователь является менеджером (его id в allowed_manager_ids).
+    Вызывает verify_telegram_auth, затем сверяет user["id"] с allowed_manager_ids.
+    В dev-режиме (SKIP_AUTH=true) поведение сохраняется — dummy-менеджер допускается.
+    """
+    skip_auth = os.environ.get("SKIP_AUTH", "false").lower() == "true"
+    if skip_auth:
+        return user_data
+
+    user_id = user_data.get("id") if isinstance(user_data, dict) else None
+    if user_id is None:
+        raise HTTPException(status_code=403, detail="Access denied: not a manager")
+
+    allowed = {str(x) for x in (get_settings().get("allowed_manager_ids") or [])}
+    if str(user_id) not in allowed:
+        raise HTTPException(status_code=403, detail="Access denied: not a manager")
+
+    return user_data

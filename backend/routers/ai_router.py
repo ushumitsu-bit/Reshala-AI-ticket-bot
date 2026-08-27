@@ -2,25 +2,20 @@
 AI Router — чат с AI и управление провайдерами
 Стоковый промпт использует переменные из настроек (service_name и т.д.)
 """
-from fastapi import APIRouter, Body
-from pymongo import MongoClient
-from services.ai.manager import AIProviderManager
-from middleware.auth import verify_telegram_auth
-from fastapi import Depends
 import os
+import re
 
-router = APIRouter(dependencies=[Depends(verify_telegram_auth)])
+from fastapi import APIRouter, Body, Depends
+from services.ai.manager import AIProviderManager
+from middleware.auth import require_manager
+from utils.db_config import get_db, get_settings
 
-MONGO_URL = os.environ.get("MONGO_URL")
-DB_NAME = os.environ.get("DB_NAME", "reshala_support")
-client = MongoClient(MONGO_URL)
-db = client[DB_NAME]
-ai_manager = AIProviderManager(db)
+router = APIRouter(dependencies=[Depends(require_manager)])
 
 
 def _get_settings():
-    """Получить все настройки из БД"""
-    return db.settings.find_one({}, {"_id": 0}) or {}
+    """Получить все настройки из БД (через кэширующий слой)."""
+    return get_settings()
 
 
 def get_stock_prompt(settings: dict = None) -> str:
@@ -142,6 +137,8 @@ def test_connection(data: dict = Body(...)):
     key = data.get("key", "").strip() or None
     if not provider_name:
         return {"ok": False, "error": "provider required"}
+    db = get_db()
+    ai_manager = AIProviderManager(db)
     result = ai_manager.test_connection(provider_name, key)
     if result.get("ok") and result.get("models"):
         db.ai_providers.update_one(
@@ -158,6 +155,8 @@ def test_connection(data: dict = Body(...)):
 
 @router.get("/models/{provider_name}")
 def get_models(provider_name: str):
+    db = get_db()
+    ai_manager = AIProviderManager(db)
     provider = ai_manager.get_provider(provider_name)
     if not provider:
         return {"ok": False, "error": "provider not found", "models": []}
@@ -170,6 +169,8 @@ def set_model(data: dict = Body(...)):
     model = data.get("model", "")
     if not provider_name or not model:
         return {"ok": False, "error": "provider and model required"}
+    db = get_db()
+    ai_manager = AIProviderManager(db)
     ai_manager.set_model(provider_name, model)
     return {"ok": True}
 
@@ -179,6 +180,8 @@ def set_active_provider(data: dict = Body(...)):
     name = data.get("provider", "")
     if not name:
         return {"ok": False, "error": "provider required"}
+    db = get_db()
+    ai_manager = AIProviderManager(db)
     ai_manager.set_active_provider(name)
     return {"ok": True}
 
@@ -192,6 +195,9 @@ def chat_test(data: dict = Body(...)):
     
     if not message:
         return {"ok": False, "error": "message required"}
+
+    db = get_db()
+    ai_manager = AIProviderManager(db)
 
     # Get knowledge base context
     kb_context = _get_knowledge_context(message)
@@ -243,8 +249,16 @@ def _get_knowledge_context(query: str) -> str:
     words = query.split()
     if not words:
         return ""
-    
-    regex = {"$regex": "|".join(words[:3]), "$options": "i"}
+
+    db = get_db()
+    if db is None:
+        return ""
+
+    safe_words = [re.escape(w) for w in words[:3] if len(w) <= 50]
+    if not safe_words:
+        return ""
+
+    regex = {"$regex": "|".join(safe_words), "$options": "i"}
     articles = list(db.knowledge_base.find(
         {"$or": [{"title": regex}, {"content": regex}, {"category": regex}]}
     ).limit(5))

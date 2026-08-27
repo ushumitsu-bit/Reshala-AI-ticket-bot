@@ -1,19 +1,19 @@
-from fastapi import APIRouter, Body
-from pymongo import MongoClient
+from fastapi import APIRouter, Body, Depends, Request
 from bson import ObjectId
 from datetime import datetime, timezone
-import os
 
-router = APIRouter()
+from middleware.auth import require_manager
+from middleware.rate_limit import limiter
+from utils.db_config import get_db
 
-MONGO_URL = os.environ.get("MONGO_URL")
-DB_NAME = os.environ.get("DB_NAME", "reshala_support")
-client = MongoClient(MONGO_URL)
-db = client[DB_NAME]
+router = APIRouter(dependencies=[Depends(require_manager)])
 
 
 @router.get("")
 def get_articles():
+    db = get_db()
+    if db is None:
+        return {"articles": []}
     articles = list(db.knowledge_base.find({}).sort("updated_at", -1))
     for a in articles:
         a["id"] = str(a.pop("_id"))
@@ -22,6 +22,9 @@ def get_articles():
 
 @router.get("/{article_id}")
 def get_article(article_id: str):
+    db = get_db()
+    if db is None:
+        return {"ok": False, "error": "database unavailable"}
     try:
         doc = db.knowledge_base.find_one({"_id": ObjectId(article_id)})
     except Exception:
@@ -33,7 +36,11 @@ def get_article(article_id: str):
 
 
 @router.post("")
-def create_article(data: dict = Body(...)):
+@limiter.limit("30/minute")
+def create_article(request: Request, data: dict = Body(...)):
+    db = get_db()
+    if db is None:
+        return {"ok": False, "error": "database unavailable"}
     title = (data.get("title") or "").strip()
     content = (data.get("content") or "").strip()
     category = (data.get("category") or "general").strip()
@@ -44,6 +51,10 @@ def create_article(data: dict = Body(...)):
         "title": title,
         "content": content,
         "category": category,
+        "source": "manual",
+        "question_patterns": [],
+        "usage_count": 0,
+        "tags": [],
         "created_at": now,
         "updated_at": now,
     }
@@ -52,7 +63,11 @@ def create_article(data: dict = Body(...)):
 
 
 @router.put("/{article_id}")
-def update_article(article_id: str, data: dict = Body(...)):
+@limiter.limit("30/minute")
+def update_article(request: Request, article_id: str, data: dict = Body(...)):
+    db = get_db()
+    if db is None:
+        return {"ok": False, "error": "database unavailable"}
     try:
         oid = ObjectId(article_id)
     except Exception:
@@ -69,7 +84,11 @@ def update_article(article_id: str, data: dict = Body(...)):
 
 
 @router.delete("/{article_id}")
-def delete_article(article_id: str):
+@limiter.limit("30/minute")
+def delete_article(request: Request, article_id: str):
+    db = get_db()
+    if db is None:
+        return {"ok": False, "error": "database unavailable"}
     try:
         oid = ObjectId(article_id)
     except Exception:
@@ -80,6 +99,9 @@ def delete_article(article_id: str):
 
 @router.get("/search/{query}")
 def search_articles(query: str):
+    db = get_db()
+    if db is None:
+        return {"articles": []}
     regex = {"$regex": query, "$options": "i"}
     articles = list(db.knowledge_base.find(
         {"$or": [{"title": regex}, {"content": regex}, {"category": regex}]}

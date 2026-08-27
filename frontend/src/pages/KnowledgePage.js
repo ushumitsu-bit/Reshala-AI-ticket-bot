@@ -3,7 +3,7 @@ import { Plus, Trash2, Edit3, BookOpen, Save, X, Search, Tag, FileText } from 'l
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
-function ArticleModal({ article, onClose, onSave }) {
+function ArticleModal({ article, onClose, onSave, initData }) {
   const [title, setTitle] = useState(article?.title || '');
   const [content, setContent] = useState(article?.content || '');
   const [category, setCategory] = useState(article?.category || 'general');
@@ -17,9 +17,11 @@ function ArticleModal({ article, onClose, onSave }) {
         ? `${API}/api/knowledge/${article.id}`
         : `${API}/api/knowledge`;
       const method = article?.id ? 'PUT' : 'POST';
+      const headers = { 'Content-Type': 'application/json' };
+      if (initData) headers['X-Telegram-Init-Data'] = initData;
       await fetch(url, {
         method,
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ title: title.trim(), content: content.trim(), category: category.trim() })
       });
       onSave();
@@ -90,7 +92,7 @@ function ArticleModal({ article, onClose, onSave }) {
   );
 }
 
-export default function KnowledgePage() {
+export default function KnowledgePage({ initData }) {
   const [articles, setArticles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -103,7 +105,9 @@ export default function KnowledgePage() {
       const url = searchQuery.trim()
         ? `${API}/api/knowledge/search/${encodeURIComponent(searchQuery.trim())}`
         : `${API}/api/knowledge`;
-      const r = await fetch(url);
+      const headers = {};
+      if (initData) headers['X-Telegram-Init-Data'] = initData;
+      const r = await fetch(url, { headers });
       const data = await r.json();
       setArticles(data.articles || []);
     } catch (e) {
@@ -111,14 +115,16 @@ export default function KnowledgePage() {
     } finally {
       setLoading(false);
     }
-  }, [searchQuery]);
+  }, [searchQuery, initData]);
 
   useEffect(() => {
     fetchArticles();
   }, [fetchArticles]);
 
   const deleteArticle = async (id) => {
-    await fetch(`${API}/api/knowledge/${id}`, { method: 'DELETE' });
+    const headers = {};
+    if (initData) headers['X-Telegram-Init-Data'] = initData;
+    await fetch(`${API}/api/knowledge/${id}`, { method: 'DELETE', headers });
     fetchArticles();
   };
 
@@ -230,6 +236,7 @@ export default function KnowledgePage() {
           article={editArticle}
           onClose={() => setShowModal(false)}
           onSave={fetchArticles}
+          initData={initData}
         />
       )}
     </div>

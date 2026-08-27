@@ -172,7 +172,7 @@ function HwidPanel({ devices, userUuid, onAction }) {
   );
 }
 
-function BalancePanel({ telegramId }) {
+function BalancePanel({ telegramId, initData }) {
   const [balance, setBalance] = useState(null);
   const [deposits, setDeposits] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -188,9 +188,11 @@ function BalancePanel({ telegramId }) {
     setError('');
     try {
       // Запрашиваем баланс и историю параллельно
+      const headers = {};
+      if (initData) headers['X-Telegram-Init-Data'] = initData;
       const [balanceRes, depositsRes] = await Promise.all([
-        fetch(`${API}/api/bedolaga/balance/${telegramId}`),
-        fetch(`${API}/api/bedolaga/deposits/${telegramId}`)
+        fetch(`${API}/api/bedolaga/balance/${telegramId}`, { headers }),
+        fetch(`${API}/api/bedolaga/deposits/${telegramId}`, { headers })
       ]);
       
       const balanceData = await balanceRes.json();
@@ -306,7 +308,7 @@ function BalancePanel({ telegramId }) {
   );
 }
 
-export default function SearchPage({ settings, searchState, setSearchState }) {
+export default function SearchPage({ settings, searchState, setSearchState, initData }) {
   const [query, setQuery] = useState(searchState?.query || '');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -330,9 +332,11 @@ export default function SearchPage({ settings, searchState, setSearchState }) {
     setResult(null);
     setActionMsg('');
     try {
+      const headers = { 'Content-Type': 'application/json' };
+      if (initData) headers['X-Telegram-Init-Data'] = initData;
       const r = await fetch(`${API}/api/lookup`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ query: q })
       });
       const data = await r.json();
@@ -359,9 +363,11 @@ export default function SearchPage({ settings, searchState, setSearchState }) {
     setConfirm({ open: false, action: null, data: null, title: '', message: '', danger: false });
     setActionMsg('');
     try {
+      const headers = { 'Content-Type': 'application/json' };
+      if (initData) headers['X-Telegram-Init-Data'] = initData;
       const r = await fetch(`${API}/api/actions/${action}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify(data)
       });
       const res = await r.json();
@@ -455,7 +461,7 @@ export default function SearchPage({ settings, searchState, setSearchState }) {
           {section === 'dates' && <DatesPanel user={user} />}
           {section === 'subscription' && <SubscriptionPanel subscription={result.subscription} />}
           {section === 'hwid' && <HwidPanel devices={result.hwid_devices} userUuid={uuid} onAction={showConfirm} />}
-          {section === 'balance' && <BalancePanel telegramId={telegramId} />}
+          {section === 'balance' && <BalancePanel telegramId={telegramId} initData={initData} />}
         </div>
       )}
 
