@@ -86,7 +86,7 @@ function App() {
   const checkAccess = useCallback((settingsData, userId) => {
     if (!settingsData || !userId) return false;
     const allowedIds = settingsData.allowed_manager_ids || [];
-    return allowedIds.includes(userId);
+    return allowedIds.some((id) => String(id) === String(userId));
   }, []);
 
   useEffect(() => {

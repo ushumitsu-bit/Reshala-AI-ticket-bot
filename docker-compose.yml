@@ -37,6 +37,7 @@ services:
       - SUPPORT_GROUP_ID=${SUPPORT_GROUP_ID}
       - ALLOWED_MANAGER_IDS=${ALLOWED_MANAGER_IDS}
       - SKIP_AUTH=${SKIP_AUTH:-false}
+      - CORS_ORIGINS=${CORS_ORIGINS:-*}
     ports:
       - "8001:8001"
     depends_on:
