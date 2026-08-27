@@ -31,7 +31,8 @@ async def ensure_indexes(db: Database):
     _safe(db.tickets, [("escalated_at", -1)])
     # Уникальный активный тикет на клиента (защита от гонки).
     # $ne не поддерживается в partialFilterExpression — используем $eq.
-    _safe(db.tickets, [("client_id", 1)], unique=True, partialFilterExpression={"is_removed": False})
+    # Явное имя, чтобы не конфликтовать с обычным индексом client_id_1.
+    _safe(db.tickets, [("client_id", 1)], unique=True, partialFilterExpression={"is_removed": False}, name="unique_active_ticket_client_id")
 
     # ticket_archive
     _safe(db.ticket_archive, "distilled")
