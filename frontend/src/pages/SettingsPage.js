@@ -99,7 +99,7 @@ export default function SettingsPage({ settings, onUpdate, initData }) {
   };
 
   const textFields = [
-    { key: 'service_name', label: 'Название сервиса', placeholder: 'Решала Support', hint: 'Используется в промпте AI как {service_name}' },
+    { key: 'service_name', label: 'Название сервиса', placeholder: 'TrueTunnel Support', hint: 'Используется в промпте AI как {service_name}' },
     { key: 'main_bot_username', label: 'Username основного бота', placeholder: 'YourVPNBot', hint: 'Бот для покупки подписки. Используется как {main_bot}' },
     { key: 'allowed_manager_ids', label: 'ID менеджеров (через запятую)', placeholder: '123456789, 987654321' },
     { key: 'support_group_id', label: 'ID группы поддержки', placeholder: '-1001234567890' },

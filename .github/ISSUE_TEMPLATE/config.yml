@@ -1,9 +1,9 @@
 blank_issues_enabled: false
 contact_links:
-  - name: 💬 Чат
-    url: https://github.com/DonMatteoVPN/Reshala-AI-ticket-bot/discussions
-    about: Оперативные вопросы лучше решать в чате с братвой.
-    
-  - name: 📚 Документация (Wiki)
-    url: https://github.com/DonMatteoVPN/Reshala-AI-ticket-bot/blob/main/docs/
-    about: Сначала читай мануал, потом пиши тикет.
+  - name: 💬 Обсуждения
+    url: https://github.com/ushumitsu-bit/Reshala-AI-ticket-bot/discussions
+    about: Вопросы по установке и настройке — в Discussions.
+
+  - name: 📚 Документация
+    url: https://github.com/ushumitsu-bit/Reshala-AI-ticket-bot/blob/main/docs/
+    about: Перед созданием issue загляните в docs/.

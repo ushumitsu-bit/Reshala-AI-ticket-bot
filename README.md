@@ -1,329 +1,193 @@
-<p align="right">
-  <a href="README.md"><img src="https://cdn.jsdelivr.net/gh/hampusborgos/country-flags@main/svg/ru.svg" alt="RU" width="20" /> RU</a> |
-  <a href="README.en.md"><img src="https://cdn.jsdelivr.net/gh/hampusborgos/country-flags@main/svg/us.svg" alt="EN" width="20" /> EN</a>
-</p>
+# TrueTunnel Support
 
-<a id="ru"></a>
-
-# Решала Support от DonMatteo 🚀
-
-![Решала Support](https://customer-assets.emergentagent.com/job_reshala-support/artifacts/hsrp3ao6_photo_2026-02-15%2002.01.49.jpeg)
-
-<br>
-
-### ❗️❗️❗️❗️ ОБНОВЛЕНИЯ И РАБОТЫ В ЭТОМ РЕПАЗИТОРИИ БОЛЬШЕ НЕ ВЕДУТЬСЯ! ИНТЕГРИРОВАН НА ПРЯМУЮ В БОТА БЕДОЛАГА! ❗️❗️❗️❗️
-
-<br>
-
-### 🎯 КОРОТКО О ГЛАВНОМ
-
-**Решала Support** — это мой личный AI-ассистент для технической поддержки VPN сервиса, которым я делюсь с вами. Я херачил как конь, чтобы создать этот инструмент и избавить себя и вас от рутины ответов на одни и те же вопросы. Не трать время на "Привет, как дела?", пусть робот пашет.
-
-> **Философия проста:** максимум автоматизации, минимум рутины. Я сделал это, чтобы бот работал на тебя, а не ты на него.
+AI-ассистент технической поддержки для VPN-сервиса на базе **Remnawave** и биллинга
+**Bedolaga**. Бот принимает обращения клиентов в личке, отвечает через AI по базе знаний,
+эскалирует сложное менеджеру и ведёт тикеты в группе поддержки. Управление — через
+Telegram Mini App.
 
 ---
 
-<details>
-  <summary><b>✨ КЛЮЧЕВЫЕ ВОЗМОЖНОСТИ</b></summary>
-  
-<br>
-  
-Я потратил кучу времени, чтобы продумать каждый аспект технической поддержки и собрать лучшие практики в удобные модули.
+## Возможности
+
+- **AI-автоответы.** 5 провайдеров (Groq, OpenAI, Anthropic, Google, OpenRouter) с
+  автоматическим failover по ключам. AI отвечает по загруженной базе знаний, «мысли» в
+  `<think>` вырезаются, при неуверенности — эскалация на менеджера.
+- **Тикеты-топики.** Каждый клиент получает отдельный топик в группе поддержки. Статусы:
+  открыт → эскалация → подозрительный → закрыт. Двусторонняя связь: ответ менеджера в
+  топике уходит клиенту в личку бота.
+- **Mini App для менеджеров.** Поиск пользователей в Remnawave (по Telegram ID / username /
+  email), карточка клиента (UUID, трафик, подписка, HWID, баланс Bedolaga), действия
+  (сброс трафика, перевыпуск подписки, блокировка, удаление HWID), работа с эскалированными
+  тикетами, база знаний, настройки AI-провайдеров.
+- **Самообучение (KB distiller).** Фоновый разбор архивных тикетов в черновики статей базы
+  знаний с ревью менеджером.
+- **Нативная тема.** Mini App подхватывает светлую/тёмную тему и акцентный цвет клиента
+  Telegram.
+
+Подробнее — [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), [`docs/API.md`](docs/API.md).
 
 ---
 
-#### 🤖 AI-автоответы: твой виртуальный саппорт
-> Это святой грааль и моя главная гордость. Забудь про копипасту одних и тех же ответов. AI сам разберется с 90% вопросов клиентов.
->
-> -   **💥 5 AI провайдеров:** Groq, OpenAI, Anthropic, Google, OpenRouter. Один сдох? Система автоматически переключится на следующий.
-> -   **🧠 База знаний:** Загружай статьи с ответами на частые вопросы. AI сам найдет нужную информацию и ответит клиенту.
-> -   **🚀 Умная эскалация:** Если AI не уверен в ответе — автоматически вызывает менеджера.
-> -   **🎛️ Фильтрация мыслей:** AI думает в `<think>` тегах, но клиент видит только готовый ответ.
+## Архитектура
+
+4 контейнера в одной Docker-сети:
+
+| Контейнер | Роль | Порт |
+|---|---|---|
+| `reshala-mongodb` | MongoDB 7 (`--auth`) | внутренний |
+| `reshala-backend` | FastAPI (Mini App API) | `8001` |
+| `reshala-bot` | Telegram-бот (long polling) | — |
+| `reshala-frontend` | React-статика за nginx | `80` (в контейнере) |
+
+Frontend обращается к backend **напрямую из браузера** по `REACT_APP_BACKEND_URL`, поэтому
+перед контейнерами нужен reverse-proxy (nginx/Caddy) с SSL. Настройки бота и секреты хранятся
+в коллекции `settings` MongoDB; при первом старте она заполняется из `.env`.
 
 ---
 
-#### 💬 Система тикетов: каждому клиенту — свой топик
-> Никаких общих чатов и путаницы. Каждый клиент получает свой персональный топик в группе поддержки.
->
-> -   **📱 Автоматическое создание:** Клиент пишет боту → создается топик с его данными.
-> -   **🎨 Статусы тикетов:** 💬 открыт → 🔥 эскалация → 🚨 подозрительный → 🟢 закрыт.
-> -   **📊 Карточка клиента:** Telegram ID, UUID, баланс Bedolaga, статус подписки Remnawave — все в одном месте.
-> -   **🔄 Двусторонняя связь:** Менеджер отвечает в топике → сообщение уходит клиенту в ЛС бота.
+## Быстрый старт (Docker Compose)
 
----
-
-#### 📱 Telegram Mini App: панель управления для менеджеров
-> Полноценная веб-панель прямо в Telegram. Никаких SSH и консолей.
->
-> -   **🔍 Поиск пользователей:** По Telegram ID, username, email — интеграция с Remnawave Panel API.
-> -   **📋 Эскалированные тикеты:** Работа с тикетами, требующими внимания менеджера (эскалированные и подозрительные).
-> -   **📚 База знаний:** Создавай и редактируй статьи для AI прямо из Mini App.
-> -   **⚙️ Настройки:** Управление AI провайдерами, токенами, группой поддержки.
-> -   **🎯 Действия с пользователями:** Сброс трафика, перевыпуск подписки, блокировка, удаление HWID.
-
----
-
-#### 🔗 Интеграция с Remnawave Panel
-> Полная интеграция с панелью управления VPN сервисом.
->
-> -   **👤 Данные пользователя:** UUID, статус подписки, использованный трафик, дата истечения.
-> -   **🛠️ Управление:** Сброс трафика, перевыпуск подписки, блокировка/разблокировка.
-> -   **🔍 Поиск:** По Telegram ID, username, email.
-
----
-
-#### 💰 Интеграция с Bedolaga
-> Система биллинга и балансов пользователей.
->
-> -   **💳 Баланс:** Отображение баланса пользователя в рублях.
-> -   **📜 История транзакций:** Последние 30 пополнений с суммами и датами.
-
----
-
-#### 🎛️ Умное управление AI
-> Держим AI в узде и экономим на токенах.
->
-> -   **🔄 Автоматический failover:** Один ключ перестал работать? Система сама переключится на следующий.
-> -   **🎯 Тестирование ключей:** Проверяй работоспособность API ключей прямо из Mini App.
-
-</details>
-
----
-
-<details>
-  <summary><b>📥 УСТАНОВКА</b></summary>
- 
-  <br>
-  
-Один раз. Навсегда. Копируй, вставляй, жми Enter.
- 
-  <br>
-  
-### 🚀 Быстрый старт (Docker Compose)
-
-#### 1. Клонирование репозитория
 ```bash
-git clone https://github.com/DonMatteoVPN/Reshala-AI-ticket-bot.git
+git clone https://github.com/ushumitsu-bit/Reshala-AI-ticket-bot.git
 cd Reshala-AI-ticket-bot
-```
 
-#### 2. Настройка переменных окружения
-```bash
 cp .env.example .env
-nano .env
-```
+nano .env            # заполнить обязательные переменные (см. ниже)
 
-**Обязательные переменные:**
-```env
-BOT_TOKEN=1234567890:ABCDEF...
-REMNAWAVE_API_URL=https://your-panel.example.com
-REMNAWAVE_API_TOKEN=your_jwt_token
-SUPPORT_GROUP_ID=-1001234567890
-ALLOWED_MANAGER_IDS=123456789,987654321
-REACT_APP_BACKEND_URL=https://api.your-domain.com
-MINI_APP_DOMAIN=your-domain.com
-MINI_APP_URL=https://your-domain.com
-SKIP_AUTH=false
-```
-
-#### 3. Запуск
-```bash
 docker compose up -d --build
+docker compose ps    # должны быть healthy/running все 4 контейнера
 ```
 
-#### 4. Проверка
+Проверка backend:
+
 ```bash
-docker compose ps
+curl -s http://localhost:8001/api/health
+# {"status":"ok","service":"TrueTunnel Support","database":"connected"}
 ```
 
-Должны работать 4 контейнера: `reshala-mongodb`, `reshala-backend`, `reshala-bot`, `reshala-frontend`.
+---
 
-> ⚠️ **MongoDB с авторизацией (`--auth`).** Если вы обновляете уже существующую инсталляцию с заполненным volume `mongodb_data`, root-пользователь `MONGO_INITDB_ROOT_USERNAME`/`MONGO_INITDB_ROOT_PASSWORD` **не создаётся повторно** — либо создайте пользователя вручную в `mongosh`, либо укажите в `.env` те же креды, что уже есть в базе. Пароль `changeme` по умолчанию — **обязательно смените**.
+## Переменные окружения
 
-#### 5. Настройка Mini App в BotFather
-1. @BotFather -> `/mybots` -> Select Bot -> **Bot Settings** -> **Menu Button**.
-2. URL: `https://your-domain.com`.
-3. Title: `Панель`.
+Полный список с пояснениями — [`docs/ENV.md`](docs/ENV.md). Минимум для запуска:
 
-### 🚀 ПРОДАКШЕН УСТАНОВКА (Production Guide)
+| Переменная | Описание |
+|---|---|
+| `BOT_TOKEN` | токен бота от [@BotFather](https://t.me/BotFather) |
+| `REMNAWAVE_API_URL` | базовый URL панели Remnawave (без `/api`) |
+| `REMNAWAVE_API_TOKEN` | API-токен Remnawave (JWT) |
+| `SUPPORT_GROUP_ID` | ID группы поддержки с топиками (начинается с `-100`) |
+| `ALLOWED_MANAGER_IDS` | числовые Telegram ID менеджеров через запятую |
+| `REACT_APP_BACKEND_URL` | публичный `https://` URL backend (виден браузеру) |
+| `MINI_APP_DOMAIN` / `MINI_APP_URL` | публичный URL фронтенда (для кнопок бота) |
+| `CORS_ORIGINS` | разрешённые Origin фронта через запятую, либо `*` |
+| `SKIP_AUTH` | `false` в проде; `true` отключает проверку initData (только localhost) |
+| `MONGO_INITDB_ROOT_USERNAME` / `MONGO_INITDB_ROOT_PASSWORD` | креды Mongo (**сменить пароль**) |
+| `BEDOLAGA_API_URL` / `BEDOLAGA_API_TOKEN` | опционально, для баланса клиента |
 
-<br>
+> **`REACT_APP_BACKEND_URL` вшивается в бандл на этапе сборки**, а `CORS_ORIGINS` читается
+> backend при старте. После их изменения:
+> ```bash
+> docker compose build --no-cache frontend   # если менялся REACT_APP_BACKEND_URL
+> docker compose up -d                        # пересоздать контейнеры (не restart!)
+> ```
+> `docker compose restart` **не перечитывает** `.env`.
 
-В продакшене мы не используем `npm start` и `python main.py`. Мы используем **Docker Compose** и **Nginx** как реверс-прокси с SSL.
+---
 
-### 🏗️ Архитектура деплоя
+## Продакшн: reverse-proxy + SSL
 
-1.  **Backend** крутится в Docker контейнере на порту `8001`.
-2.  **Frontend** собирается в статику и раздается Nginx внутри контейнера на порту `3000`.
-3.  **Внешний Nginx** (на хосте) принимает запросы на `80` и `443` портах и проксирует их:
-    *   `api.your-domain.com` -> `localhost:8001` (Backend)
-    *   `your-domain.com` -> `localhost:3000` (Frontend)
+В репозитории есть [`nginx.conf.example`](nginx.conf.example) — вариант с **одним доменом**
+(`/api/` → backend, `/` → frontend, same-origin, CORS не нужен):
 
-<br>
-
-### 🛠️ Пошаговая инструкция
-
-#### 1. Подготовка сервера
-Установи Docker и Nginx:
 ```bash
-sudo apt update && sudo apt install -y docker.io docker-compose-plugin nginx certbot python3-certbot-nginx
-```
-
-#### 2. Настройка проекта
-Клонируй репо и настрой `.env` как описано в "Быстром старте", но с важными изменениями для прода:
-
-```env
-# URL бэкенда (указываем внешний домен)
-REACT_APP_BACKEND_URL=https://api.your-domain.com
-
-# URL фронтенда
-MINI_APP_DOMAIN=your-domain.com
-MINI_APP_URL=https://your-domain.com
-
-# Отключаем режим разработки!
-SKIP_AUTH=false
-```
-
-
-#### 3. Настройка Nginx (Reverse Proxy)
-
-В репозитории уже есть готовый пример конфига `nginx.conf.example`.
-
-1. Скопируй его в nginx (убрав .example):
-```bash
-sudo cp nginx.conf.example /etc/nginx/sites-available/nginx.conf
-sudo nano /etc/nginx/sites-available/nginx.conf
-```
-
-2. Внутри файла замени `your-domain.com` на свой домен.
-
-Активируй конфиг и проверь ошибки:
-```bash
-sudo ln -s /etc/nginx/sites-available/nginx.conf /etc/nginx/sites-enabled/
-sudo nginx -t
-sudo systemctl reload nginx
-```
-
-#### 4. Получение SSL (HTTPS)
-Certbot сам все настроит:
-```bash
+sudo apt update && sudo apt install -y nginx certbot python3-certbot-nginx
+sudo cp nginx.conf.example /etc/nginx/sites-available/truetunnel
+sudo nano /etc/nginx/sites-available/truetunnel        # заменить your-domain.com
+sudo ln -s /etc/nginx/sites-available/truetunnel /etc/nginx/sites-enabled/
+sudo nginx -t && sudo systemctl reload nginx
 sudo certbot --nginx -d your-domain.com
 ```
 
-#### 5. Запуск
-```bash
-docker compose up -d --build
+`.env` для одного домена:
+
+```env
+REACT_APP_BACKEND_URL=https://your-domain.com
+MINI_APP_DOMAIN=https://your-domain.com
+MINI_APP_URL=https://your-domain.com
+CORS_ORIGINS=https://your-domain.com
 ```
-Теперь твой бот доступен по HTTPS, а фронтенд открывается в Telegram без ошибок.
+
+**Вариант с двумя поддоменами** (`support.example.com` → frontend,
+`api-support.example.com` → backend): два `server`-блока, и обязательно
+`CORS_ORIGINS=https://support.example.com` — точное значение Origin фронта, со схемой,
+без слэша в конце.
 
 ---
 
-### 📦 Вариант без Docker (Systemd)
+## Настройка бота
 
-Если ты олдскул и не любишь Docker, вот unit-файлы для systemd.
-
-**Backend (`/etc/systemd/system/reshala-backend.service`):**
-```ini
-[Unit]
-Description=Reshala Backend API
-After=network.target mongodb.service
-
-[Service]
-Type=simple
-User=root
-WorkingDirectory=/opt/Reshala-AI-ticket-bot/backend
-EnvironmentFile=/opt/Reshala-AI-ticket-bot/.env
-ExecStart=/usr/bin/python3 -m uvicorn server:app --host 0.0.0.0 --port 8001
-Restart=always
-
-[Install]
-WantedBy=multi-user.target
-```
-
-**Bot (`/etc/systemd/system/reshala-bot.service`):**
-```ini
-[Unit]
-Description=Reshala Telegram Bot
-After=network.target mongodb.service
-
-[Service]
-Type=simple
-User=root
-WorkingDirectory=/opt/Reshala-AI-ticket-bot/backend
-EnvironmentFile=/opt/Reshala-AI-ticket-bot/.env
-ExecStart=/usr/bin/python3 -m bot.main
-Restart=always
-
-[Install]
-WantedBy=multi-user.target
-```
-
-Управление:
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable --now reshala-backend reshala-bot
-```
-
-</details>
+1. Создать бота у [@BotFather](https://t.me/BotFather), вставить токен в `BOT_TOKEN`.
+2. **Menu Button в BotFather не задавать.** Кнопку Mini App бот ставит сам — персонально
+   менеджеру после `/start`. У обычных пользователей её не будет.
+3. Добавить бота в группу поддержки, включить топики, выдать право управлять темами. ID
+   группы (`-100…`) → `SUPPORT_GROUP_ID`.
+4. Узнать числовые Telegram ID менеджеров ([@userinfobot](https://t.me/userinfobot)) →
+   `ALLOWED_MANAGER_IDS`.
+5. Менеджер открывает бота, шлёт `/start` → появляется кнопка «Dashboard».
 
 ---
 
-<details>
-  <summary><b>📁 СТРУКТУРА ПРОЕКТА</b></summary>
- 
-  <br>
+## Обновление
+
+```bash
+git pull --ff-only
+docker compose build --no-cache
+docker compose up -d
+```
+
+Если `git pull` жалуется на локальные правки `docker-compose.yml` (например, изменён порт
+проброса фронта):
+
+```bash
+git stash
+git pull --ff-only
+git stash pop
+```
+
+---
+
+## Траблшутинг
+
+| Симптом | Причина / решение |
+|---|---|
+| Mini App: «Доступ запрещён», в логах backend `OPTIONS /api/... 400` | CORS preflight отклонён. `CORS_ORIGINS` не совпадает с Origin фронта или не применился. Проверить: `docker compose exec backend python -c "import os;print(os.environ.get('CORS_ORIGINS'))"`. Исправить `.env` → `docker compose up -d backend` (не restart). |
+| `HTTP 403: Invalid initData signature` | `bot_token` в `db.settings` не совпадает с реальным токеном бота. Обновить в БД и `docker compose restart bot backend`. |
+| `HTTP 403: Access denied: not a manager` | числовой Telegram ID менеджера не в `allowed_manager_ids`. Добавить в `.env` и в `db.settings`. |
+| Поиск Remnawave: `status=403 Forbidden` | `remnawave_api_token` в `db.settings` перекрывает `.env`. Записать рабочий токен прямо в `db.settings`. |
+| Кнопка Mini App видна обычным пользователям | В BotFather задан глобальный Menu Button URL — снять его. Бот при старте сбрасывает глобальную кнопку на «commands». |
+| MongoDB: root-юзер не создаётся | На существующем volume `mongodb_data` root не пересоздаётся. Указать в `.env` те же креды, что уже в базе, либо создать пользователя в `mongosh`. |
+
+---
+
+## Структура проекта
 
 ```
 Reshala-AI-ticket-bot/
-├── backend/                    # Python backend
-│   ├── bot/                    # Telegram бот
-│   ├── services/               # Бизнес-логика
-│   ├── routers/                # FastAPI эндпоинты
-│   └── utils/                  # Утилиты
-├── frontend/                   # React Mini App
-├── docker-compose.yml          # Docker Compose
-└── README.md                   # Ты здесь
+├── backend/
+│   ├── bot/            # Telegram-бот (handlers, keyboards)
+│   ├── routers/        # FastAPI-эндпоинты Mini App
+│   ├── services/       # AI, KB distiller, интеграции
+│   ├── middleware/     # auth (валидация Telegram initData), rate limit
+│   └── utils/          # конфиг из MongoDB + ENV
+├── frontend/           # React Mini App (CRA)
+├── docs/               # ARCHITECTURE / API / ENV / IMPROVEMENT_PLAN
+├── nginx.conf.example  # пример host reverse-proxy
+└── docker-compose.yml
 ```
-
-</details>
 
 ---
 
-## 🥃 ФИНАЛЬНОЕ СЛОВО
+## Вклад
 
-Я сделал этот инструмент, чтобы ты мог зарабатывать, а не отвечать на одни и те же вопросы. Видишь баг? Пиши. Нравится фича? Пользуйся.
-
-**Удачи в бизнесе.** 👊
- 
-  <br>
-  
-### КТО ЮЗАЕТ И НЕ СТАВИТ ЗВЕЗДУ, ТОТ 🐓 
-
-  <br>
-  
-### Поддержать проект 💸 (на пиво и нервы):
-
-#### Криптовалюта:
-- **USDT (TRC20):** `TKPnnmtJcDM7B2uCoLQciwZmS7f8ckMNx9` 💎
-- **Bitcoin (BTC):** `bc1q235adg3dd4t43jmkpqka0hj305la43md38fc0n` ₿
-- **Ethereum (ETH):** `0xB42a384A7d14f8cd0f29f1984a5eA47C25d9AA48` 💠
- 
-[💰 Донатик через Telegram](https://t.me/tribute/app?startapp=dxrn)
- 
-  <br>
-  
-<details>
-  <summary><b>🌟 История успеха</b></summary>
-
-
-
-[![Star History Chart](https://api.star-history.com/svg?repos=DonMatteoVPN/Reshala-AI-ticket-bot&type=date&legend=top-left)](https://www.star-history.com/#DonMatteoVPN/Reshala-AI-ticket-bot&type=date&legend=top-left)
-  
-</details>
-
-## 🤝 Братва (Контрибьюторы)
-Респект всем, кто помогает делать этот инструмент лучше:
-
-<a href="https://github.com/DonMatteoVPN/Reshala-AI-ticket-bot/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=DonMatteoVPN/Reshala-AI-ticket-bot" />
-</a>
+PR и issue приветствуются — см. [`CONTRIBUTING.md`](CONTRIBUTING.md).

@@ -1,5 +1,5 @@
 """
-Обработчики /start и /help — Решала support от DonMatteo
+Обработчики /start и /help — TrueTunnel Support
 """
 import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo, MenuButtonWebApp, MenuButtonCommands
@@ -49,7 +49,7 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Менеджер
     manager_text = (
-        f"<b>Решала support от DonMatteo</b>\n\n"
+        f"<b>TrueTunnel Support</b>\n\n"
         f"Сервис: {service_name}\n\n"
         "Отправьте Telegram ID или username пользователя для поиска.\n\n"
         "💡 <b>Все настройки теперь доступны только в Mini App.</b>\n"
@@ -113,13 +113,21 @@ async def help_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     config = get_settings()
 
     if not _check_access(user_id):
+        # Страховка: у не-менеджера не должно быть кнопки Mini App
+        try:
+            await context.bot.set_chat_menu_button(
+                chat_id=update.effective_chat.id,
+                menu_button=MenuButtonCommands(),
+            )
+        except Exception:
+            pass
         await update.message.reply_text("Напишите ваше сообщение — менеджер ответит здесь.")
         return
 
     mini_app_url = config.get("miniapp_url") or (f"https://{config.get('mini_app_domain')}" if config.get("mini_app_domain") else "")
 
     text = (
-        "<b>Справка — Решала support от DonMatteo</b>\n\n"
+        "<b>Справка — TrueTunnel Support</b>\n\n"
         "<b>Поиск:</b> Отправьте Telegram ID или username\n\n"
         "<b>Команды:</b>\n"
         "/start — Начать\n"

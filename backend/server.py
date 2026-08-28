@@ -84,14 +84,14 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.error(f"Failed to start KB distiller: {e}")
 
-    logger.info("Решала support от DonMatteo - Backend started")
+    logger.info("TrueTunnel Support - Backend started")
     yield
     if scheduler:
         scheduler.shutdown(wait=False)
     client.close()
 
 
-app = FastAPI(title="Решала support от DonMatteo", lifespan=lifespan)
+app = FastAPI(title="TrueTunnel Support", lifespan=lifespan)
 
 # Rate Limiter Setup
 app.state.limiter = limiter
@@ -140,6 +140,6 @@ def health():
         
     return {
         "status": "ok", 
-        "service": "Решала support от DonMatteo",
+        "service": "TrueTunnel Support",
         "database": db_status
     }

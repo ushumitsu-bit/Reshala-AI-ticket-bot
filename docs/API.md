@@ -1,4 +1,4 @@
-# 📚 Документация API Reshala Support
+# 📚 Документация API TrueTunnel Support
 
 ## 🔗 Базовый URL
 - **Локально:** `http://localhost:8001`

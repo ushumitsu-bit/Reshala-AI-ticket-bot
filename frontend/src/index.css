@@ -1,37 +1,105 @@
+/* ───────────────────────────────────────────────
+   TrueTunnel Support — Telegram-native theme layer
+
+   Каждый семантический токен наследуется от переменной
+   Telegram (--tg-theme-*, инжектит telegram-web-app.js),
+   с фолбэком на нейтральную палитру для dev/браузера.
+   ─────────────────────────────────────────────── */
 :root {
-  --bg-primary: #0b0e14;
-  --bg-secondary: #0f1219;
-  --bg-card: #131720;
-  --bg-elevated: #181d28;
-  --bg-input: #0d1017;
-  --border-default: rgba(0, 220, 200, 0.06);
-  --border-hover: rgba(0, 220, 200, 0.14);
-  --border-accent: rgba(0, 220, 200, 0.25);
-  --text-primary: #e2e8f0;
-  --text-secondary: #7a8599;
-  --text-muted: #4a5568;
-  --accent: #00dcc8;
-  --accent-secondary: #00b4d8;
-  --accent-dim: rgba(0, 220, 200, 0.08);
-  --accent-glow: rgba(0, 220, 200, 0.2);
-  --success: #22d87e;
-  --success-bg: rgba(34, 216, 126, 0.08);
-  --warning: #f5a623;
-  --warning-bg: rgba(245, 166, 35, 0.08);
-  --danger: #ef4565;
-  --danger-bg: rgba(239, 69, 101, 0.08);
-  --info: #00b4d8;
-  --info-bg: rgba(0, 180, 216, 0.08);
+  color-scheme: light dark;
+
+  /* Поверхности */
+  --bg-primary: var(--tg-theme-bg-color, #ffffff);
+  --bg-secondary: var(--tg-theme-secondary-bg-color, #f1f3f5);
+  --bg-card: var(--tg-theme-section-bg-color, #ffffff);
+  --bg-elevated: var(--tg-theme-secondary-bg-color, #f1f3f5);
+  --bg-input: var(--tg-theme-bg-color, #ffffff);
+
+  /* Текст */
+  --text-primary: var(--tg-theme-text-color, #0f0f0f);
+  --text-secondary: var(--tg-theme-subtitle-text-color, #55606a);
+  --text-muted: var(--tg-theme-hint-color, #8b9199);
+
+  /* Акцент — из темы пользователя (кнопки/ссылки Telegram) */
+  --accent: var(--tg-theme-button-color, #3390ec);
+  --accent-secondary: var(--tg-theme-button-color, #3390ec);
+  --accent-contrast: var(--tg-theme-button-text-color, #ffffff);
+  --link: var(--tg-theme-link-color, #3390ec);
+  --accent-dim: color-mix(in srgb, var(--accent) 12%, transparent);
+  --accent-glow: transparent;
+
+  /* Статусы */
+  --success: #1f9d55;
+  --success-bg: color-mix(in srgb, #1f9d55 13%, transparent);
+  --warning: #b7791f;
+  --warning-bg: color-mix(in srgb, #b7791f 15%, transparent);
+  --danger: var(--tg-theme-destructive-text-color, #e5484d);
+  --danger-bg: color-mix(in srgb, var(--danger) 13%, transparent);
+  --info: var(--tg-theme-link-color, #3390ec);
+  --info-bg: color-mix(in srgb, var(--info) 12%, transparent);
+
+  /* Границы — производные от hint-color */
+  --border-default: color-mix(in srgb, var(--text-muted) 24%, transparent);
+  --border-hover: color-mix(in srgb, var(--text-muted) 42%, transparent);
+  --border-accent: color-mix(in srgb, var(--accent) 45%, transparent);
+  --border: var(--border-default);
+
   --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 14px;
-  --radius-xl: 18px;
+  --radius-md: 9px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
   --radius-pill: 999px;
-  --font: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  --font-mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Roboto", "Helvetica Neue", "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.05);
+
+  /* safe-area (Telegram fullscreen / home indicator) */
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-top: env(safe-area-inset-top, 0px);
 }
 
-* { box-sizing: border-box; margin: 0; padding: 0; }
+/* Тёмная тема: явный выбор (data-theme) ИЛИ системная,
+   если пользователь не выбрал светлую. Внутри Telegram
+   --tg-theme-* всегда заданы и перекрывают эти фолбэки. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg-primary: var(--tg-theme-bg-color, #17212b);
+    --bg-secondary: var(--tg-theme-secondary-bg-color, #232e3c);
+    --bg-card: var(--tg-theme-section-bg-color, #1c2733);
+    --bg-elevated: var(--tg-theme-secondary-bg-color, #232e3c);
+    --bg-input: var(--tg-theme-bg-color, #17212b);
+    --text-primary: var(--tg-theme-text-color, #f4f4f5);
+    --text-secondary: var(--tg-theme-subtitle-text-color, #a9b4bf);
+    --text-muted: var(--tg-theme-hint-color, #6d7f92);
+    --accent: var(--tg-theme-button-color, #5ea5f0);
+    --link: var(--tg-theme-link-color, #6ab3f3);
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg-primary: var(--tg-theme-bg-color, #17212b);
+  --bg-secondary: var(--tg-theme-secondary-bg-color, #232e3c);
+  --bg-card: var(--tg-theme-section-bg-color, #1c2733);
+  --bg-elevated: var(--tg-theme-secondary-bg-color, #232e3c);
+  --bg-input: var(--tg-theme-bg-color, #17212b);
+  --text-primary: var(--tg-theme-text-color, #f4f4f5);
+  --text-secondary: var(--tg-theme-subtitle-text-color, #a9b4bf);
+  --text-muted: var(--tg-theme-hint-color, #6d7f92);
+  --accent: var(--tg-theme-button-color, #5ea5f0);
+  --link: var(--tg-theme-link-color, #6ab3f3);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
 
 body {
   font-family: var(--font);
@@ -40,35 +108,67 @@ body {
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
   font-size: 15px;
-  line-height: 1.55;
+  line-height: 1.5;
   overflow-x: hidden;
-  background-image:
-    radial-gradient(ellipse at 20% 0%, rgba(0, 220, 200, 0.03) 0%, transparent 60%),
-    radial-gradient(ellipse at 80% 100%, rgba(0, 180, 216, 0.02) 0%, transparent 50%);
 }
 
-#root { min-height: 100vh; }
+#root {
+  min-height: 100vh;
+}
 
-::-webkit-scrollbar { width: 3px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--border-hover); border-radius: 3px; }
+::-webkit-scrollbar {
+  width: 3px;
+  height: 3px;
+}
 
-input, button, select, textarea { font-family: var(--font); }
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-hover);
+  border-radius: 3px;
+}
+
+input,
+button,
+select,
+textarea {
+  font-family: var(--font);
+}
+
+a {
+  color: var(--link);
+}
 
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(4px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @keyframes slideUp {
-  from { opacity: 0; transform: translateY(16px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
-@keyframes glow {
-  0%, 100% { box-shadow: 0 0 12px rgba(0, 220, 200, 0.1); }
-  50% { box-shadow: 0 0 24px rgba(0, 220, 200, 0.2); }
+.animate-fade {
+  animation: fadeIn 0.22s ease forwards;
 }
 
-.animate-fade { animation: fadeIn 0.25s ease forwards; }
-.animate-slide { animation: slideUp 0.35s ease forwards; }
+.animate-slide {
+  animation: slideUp 0.3s ease forwards;
+}

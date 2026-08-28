@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Решала support от DonMatteo — модульный Telegram бот
+TrueTunnel Support — модульный Telegram бот
 Точка входа: запуск бота с конфигурацией из MongoDB
 """
 import os
@@ -48,8 +48,10 @@ async def post_init(application: Application) -> None:
     miniapp_url = config.get("miniapp_url") if config else None
 
     try:
-        # По умолчанию у всех обычное меню
+        # Глобально у всех — обычное меню команд. Кнопку Mini App бот
+        # ставит персонально менеджеру в /start (per-chat menu button).
         await application.bot.set_chat_menu_button(menu_button=MenuButtonCommands())
+        logger.info("post_init: default menu button = commands (Mini App button задаётся per-chat менеджеру)")
     except Exception as e:
         logger.warning("post_init set_chat_menu_button: %s", e)
     
@@ -120,7 +122,7 @@ def main():
     logger.info("Registered dispatch_message handler for private chats")
     application.add_handler(MessageHandler(support_content, dispatch_message))
 
-    logger.info("Решала support от DonMatteo — бот запущен")
+    logger.info("TrueTunnel Support — бот запущен")
     application.run_polling(allowed_updates=["message", "callback_query"])
 
 

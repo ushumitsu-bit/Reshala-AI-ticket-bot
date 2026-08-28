@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import './App.css';
-import Header from './components/Header';
 import Navigation from './components/Navigation';
+import { initTelegram } from './telegram';
 import SearchPage from './pages/SearchPage';
 import SettingsPage from './pages/SettingsPage';
 import ProvidersPage from './pages/ProvidersPage';
@@ -15,13 +15,15 @@ const API = process.env.REACT_APP_BACKEND_URL;
 
 function AccessDenied() {
   return (
-    <div className="access-denied" data-testid="access-denied">
-      <div className="access-denied-icon">
-        <ShieldX size={48} />
+    <div className="app" data-testid="app-container">
+      <div className="access-denied" data-testid="access-denied">
+        <div className="access-denied-icon">
+          <ShieldX size={48} />
+        </div>
+        <h2>Доступ запрещён</h2>
+        <p>Mini App доступен только для менеджеров.</p>
+        <p className="text-muted">Если вы менеджер — обратитесь к администратору для добавления вашего ID.</p>
       </div>
-      <h2>Доступ запрещён</h2>
-      <p>Mini App доступен только для менеджеров.</p>
-      <p className="text-muted">Если вы менеджер — обратитесь к администратору для добавления вашего ID.</p>
     </div>
   );
 }
@@ -32,7 +34,6 @@ function App() {
   const [providers, setProviders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [accessDenied, setAccessDenied] = useState(false);
-  const [telegramUser, setTelegramUser] = useState(null);
   const [initData, setInitData] = useState('');
   const [pendingCount, setPendingCount] = useState(0);
 
@@ -91,22 +92,9 @@ function App() {
 
   useEffect(() => {
     const init = async () => {
-      let tgUser = null;
-      let rawData = '';
+      const { user: tgUser, initData: rawData } = initTelegram();
 
-      if (typeof window.Telegram !== 'undefined' && window.Telegram.WebApp) {
-        window.Telegram.WebApp.ready();
-        window.Telegram.WebApp.expand();
-
-        rawData = window.Telegram.WebApp.initData;
-        setInitData(rawData);
-
-        const initDataUnsafe = window.Telegram.WebApp.initDataUnsafe;
-        if (initDataUnsafe?.user) {
-          tgUser = initDataUnsafe.user;
-          setTelegramUser(tgUser);
-        }
-      }
+      setInitData(rawData);
 
       const settingsData = await fetchSettings(rawData);
       await fetchProviders(rawData);
@@ -137,17 +125,11 @@ function App() {
   }
 
   if (accessDenied) {
-    return (
-      <div className="app" data-testid="app-container">
-        <Header settings={settings} />
-        <AccessDenied />
-      </div>
-    );
+    return <AccessDenied />;
   }
 
   return (
     <div className="app" data-testid="app-container">
-      <Header settings={settings} telegramUser={telegramUser} />
       <Navigation page={page} setPage={setPage} pendingCount={pendingCount} />
       <main className="app-main">
         {/* Поиск — сохраняет состояние */}
