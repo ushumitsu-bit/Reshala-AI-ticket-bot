@@ -28,16 +28,51 @@ TOPIC_SUSPICIOUS = "🚨"
 TOPIC_CLOSED = "🟢"  # Используем 🟢 вместо ✅, так как Telegram удаляет ✅ из названий топиков
 
 ESCALATION_TRIGGERS = [
+    # --- RU: варианты фраз, которые бот пишет при передаче менеджеру ---
     "уточнить у менеджера",
     "уточню у менеджера",
-    "уточню у мен",  # "уточню у менеджера" в разных падежах
+    "уточню у мен",              # "уточню у менеджера" в разных падежах
     "вызываю менеджера",
     "нужна помощь менеджера",
     "не могу ответить на этот вопрос",
     "передаю менеджеру",
-    "require manager",
+    "передам менеджер",          # "передам менеджеру", "передам менеджерам"
+    "передам ваш вопрос менеджер",
+    "передам вопрос менеджер",
+    "передам ваш вопрос ему",
+    "передам вас менеджер",
+    "передаю ваш вопрос менеджер",
+    "передавайте менеджер",
+    "передам в поддержк",
+    "передаю в поддержк",
+    "подключаю менеджер",
+    "подключу менеджер",
+    "подключаю оператор",
+    "это вопрос для менеджер",
+    "это вопрос к менеджер",
+    "менеджер свяжется",
+    "менеджер скоро ответит",
+    "менеджер подключится",
     "нужен менеджер",
+    "нужен оператор",
     "обратитесь к менеджеру",
+    "передам это менеджеру",
+    # --- EN ---
+    "require manager",
+    "pass your question to a manager",
+    "pass this to a manager",
+    "pass this on to a manager",
+    "forward you to a manager",
+    "forward your question to a manager",
+    "connect you with a manager",
+    "connecting you to a manager",
+    "escalate this to a manager",
+    "escalate this to our team",
+    "a manager will get back to you",
+    "a manager will contact you",
+    "our support team will",
+    "hand this over to a manager",
+    "get a manager to help",
 ]
 
 from utils.db_config import get_settings

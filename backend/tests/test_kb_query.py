@@ -109,3 +109,14 @@ def test_build_system_prompt_falls_back_to_stock():
     p = context.build_system_prompt({"service_name": "X", "main_bot_username": "Y"})
     assert "AI-ассистент" in p
     assert "ПРИОРИТЕТНЫЕ ПРАВИЛА" in p
+
+
+def test_escalation_detection_multilingual():
+    from utils.support_common import should_escalate
+    assert should_escalate("Сейчас передам Ваш вопрос менеджеру.")
+    assert should_escalate("Подключаю менеджера, подождите минутку.")
+    assert should_escalate("Это вопрос для менеджера, он скоро ответит.")
+    assert should_escalate("I'll pass your question to a manager.")
+    assert should_escalate("")  # пустой ответ -> эскалация
+    assert not should_escalate("Попробуйте сменить сервер, обычно помогает.")
+    assert not should_escalate("Your subscription is active until next month.")
