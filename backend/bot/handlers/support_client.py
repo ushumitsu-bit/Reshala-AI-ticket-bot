@@ -59,13 +59,20 @@ def clear_conversation(context):
     context.user_data.pop("has_provided_proof", None)
 
 def filter_ai_thinking(text: str) -> str:
-    """Удаляет теги <think>...</think> и подобные из ответа AI"""
+    """Убирает <think>-теги и markdown-разметку (Telegram её не рендерит)."""
     if not text:
         return text
     import re
     text = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL | re.IGNORECASE)
     text = re.sub(r'<thinking>.*?</thinking>', '', text, flags=re.DOTALL | re.IGNORECASE)
     text = re.sub(r'<thought>.*?</thought>', '', text, flags=re.DOTALL | re.IGNORECASE)
+    # markdown -> plain (модели иногда игнорируют "без markdown", особенно на англ.)
+    text = re.sub(r'\*\*(.+?)\*\*', r'\1', text)          # **bold**
+    text = re.sub(r'__(.+?)__', r'\1', text)              # __bold__
+    text = re.sub(r'(?<![\w*])\*(?!\s)(.+?)(?<!\s)\*(?![\w*])', r'\1', text)  # *italic*
+    text = re.sub(r'`([^`]+)`', r'\1', text)              # `code`
+    text = re.sub(r'(?m)^\s{0,3}#{1,6}\s+', '', text)     # # заголовки
+    text = re.sub(r'(?m)^\s{0,3}[-*]\s+', '• ', text)     # маркеры списка -> •
     text = re.sub(r'\n{3,}', '\n\n', text)
     return text.strip()
 

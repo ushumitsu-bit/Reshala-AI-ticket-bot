@@ -120,3 +120,12 @@ def test_escalation_detection_multilingual():
     assert should_escalate("")  # пустой ответ -> эскалация
     assert not should_escalate("Попробуйте сменить сервер, обычно помогает.")
     assert not should_escalate("Your subscription is active until next month.")
+
+
+def test_filter_strips_markdown():
+    from bot.handlers.support_client import filter_ai_thinking
+    out = filter_ai_thinking("Open **@Isothermbot** and tap *Connect*.\n- step one\n## Header\n`code`")
+    assert "**" not in out and "*Connect*" not in out
+    assert "@Isothermbot" in out and "Connect" in out
+    assert "Header" in out and "#" not in out
+    assert "• step one" in out
