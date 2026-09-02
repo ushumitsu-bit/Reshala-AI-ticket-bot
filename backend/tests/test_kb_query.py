@@ -56,6 +56,17 @@ def test_finds_ios_routing_by_synonyms():
     assert "routing.happ.su" in ctx
 
 
+def test_keywords_field_is_scored():
+    # статья, где термин запроса есть только в keywords, должна победить
+    kw_art = {"title": "Про разделение трафика", "category": "general",
+              "keywords": "айфон сбербанк госуслуги банк не работает автоконфиг msk",
+              "content": "Подключитесь к серверу Авто RU."}
+    noise = {"title": "Тарифы", "category": "pricing", "content": "150 рублей"}
+    db = FakeDB(FakeKB([noise, kw_art]))
+    ctx = context.build_knowledge_context(db, "на айфоне не работает сбербанк")
+    assert "Про разделение трафика" in ctx
+
+
 def test_fallback_to_core_articles_when_no_match():
     db = FakeDB(FakeKB([IOS_ROUTING, PRICING, AI_CHEAT]))
     ctx = context.build_knowledge_context(db, "абракадабра квакозябра")

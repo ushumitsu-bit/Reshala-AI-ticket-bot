@@ -232,11 +232,14 @@ def build_knowledge_context(db, query: str, limit: int = 4) -> str:
             for a in cands:
                 title = (a.get("title") or "")
                 cat = (a.get("category") or "")
+                kw = str(a.get("keywords") or "")
                 content = (a.get("content") or "")
                 score = 0
                 for c in compiled:
                     if c.search(title):
                         score += 3
+                    elif c.search(kw):
+                        score += 2
                     elif c.search(cat):
                         score += 2
                     elif c.search(content):
