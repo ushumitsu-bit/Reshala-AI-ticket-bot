@@ -1,4 +1,4 @@
-# 📚 Документация API S-Access Support
+# 📚 Документация API
 
 ## 🔗 Базовый URL
 - **Локально:** `http://localhost:8001`

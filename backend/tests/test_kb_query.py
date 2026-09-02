@@ -93,12 +93,12 @@ def test_empty_on_no_db():
 
 def test_build_system_prompt_substitutes_and_appends():
     settings = {
-        "service_name": "S-Access Support",
+        "service_name": "VPN Support",
         "main_bot_username": "Isothermbot",
         "system_prompt_override": "Бот сервиса {service_name}. Продажи: @{main_bot}.",
     }
     p = context.build_system_prompt(settings, user_context="## USER", kb_context="## KB TEXT")
-    assert "S-Access Support" in p and "@Isothermbot" in p
+    assert "VPN Support" in p and "@Isothermbot" in p
     assert "{service_name}" not in p and "{main_bot}" not in p
     assert "ПРИОРИТЕТНЫЕ ПРАВИЛА" in p
     assert "## USER" in p

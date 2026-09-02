@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 MONGO_URL = os.environ.get("MONGO_URL")
 DB_NAME = os.environ.get("DB_NAME", "reshala_support")
-SERVICE_NAME = os.environ.get("SERVICE_NAME", "S-Access Support")
+SERVICE_NAME = os.environ.get("SERVICE_NAME", "VPN Support")
 
 client = MongoClient(MONGO_URL)
 db = client[DB_NAME]
@@ -37,7 +37,7 @@ db = client[DB_NAME]
 def init_default_settings():
     if db.settings.count_documents({}) == 0:
         db.settings.insert_one({
-            "service_name": "S-Access Support",
+            "service_name": "VPN Support",
             "bot_token": "",
             "remnawave_api_url": "",
             "remnawave_api_token": "",

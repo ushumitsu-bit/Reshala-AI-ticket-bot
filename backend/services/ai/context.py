@@ -10,7 +10,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_SERVICE_NAME = "S-Access Support"
+DEFAULT_SERVICE_NAME = "VPN Support"
 
 # --- Приоритетные правила: приклеиваются к любому промпту (override или сток) ---
 PRIORITY_RULES = """\

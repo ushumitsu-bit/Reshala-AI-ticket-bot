@@ -176,7 +176,7 @@ async def handle_client_message(update: Update, context: ContextTypes.DEFAULT_TY
     config = get_settings()
     db = get_db()
     support_group_id = get_support_group_id()
-    service_name = config.get("service_name", "S-Access Support")
+    service_name = config.get("service_name", "VPN Support")
     
     if not support_group_id:
         await update.message.reply_text(f"Поддержка {service_name} временно недоступна.")

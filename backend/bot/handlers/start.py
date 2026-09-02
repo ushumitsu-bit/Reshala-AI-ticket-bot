@@ -1,5 +1,5 @@
 """
-Обработчики /start и /help — S-Access Support
+Обработчики /start и /help — VPN Support
 """
 import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo, MenuButtonWebApp, MenuButtonCommands
@@ -19,7 +19,7 @@ def _check_access(user_id):
 async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     config = get_settings()
-    service_name = config.get("service_name", "S-Access Support")
+    service_name = config.get("service_name", "VPN Support")
     mini_app_url = config.get("miniapp_url", "")
     allowed_managers = config.get("allowed_manager_ids", [])
     
@@ -124,7 +124,7 @@ async def help_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     mini_app_url = config.get("miniapp_url") or (f"https://{config.get('mini_app_domain')}" if config.get("mini_app_domain") else "")
-    service_name = config.get("service_name", "S-Access Support")
+    service_name = config.get("service_name", "VPN Support")
 
     text = (
         f"<b>Справка — {service_name}</b>\n\n"

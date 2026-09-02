@@ -1,5 +1,5 @@
 """
-Обработчик поиска пользователей — S-Access Support
+Обработчик поиска пользователей — VPN Support
 Ищет по Telegram ID, short UUID, username
 """
 import re

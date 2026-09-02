@@ -1,4 +1,4 @@
-# S-Access Support
+# AI-бот поддержки VPN (Remnawave + Bedolaga)
 
 AI-ассистент технической поддержки для VPN-сервиса на базе **Remnawave** и биллинга
 **Bedolaga**. Бот принимает обращения клиентов в личке, отвечает через AI по базе знаний,
@@ -62,7 +62,7 @@ docker compose ps    # должны быть healthy/running все 4 конте
 
 ```bash
 curl -s http://localhost:8001/api/health
-# {"status":"ok","service":"S-Access Support","database":"connected"}
+# {"status":"ok","service":"VPN Support","database":"connected"}
 ```
 
 ---
@@ -102,9 +102,9 @@ curl -s http://localhost:8001/api/health
 
 ```bash
 sudo apt update && sudo apt install -y nginx certbot python3-certbot-nginx
-sudo cp nginx.conf.example /etc/nginx/sites-available/truetunnel
-sudo nano /etc/nginx/sites-available/truetunnel        # заменить your-domain.com
-sudo ln -s /etc/nginx/sites-available/truetunnel /etc/nginx/sites-enabled/
+sudo cp nginx.conf.example /etc/nginx/sites-available/vpn-support
+sudo nano /etc/nginx/sites-available/vpn-support        # заменить your-domain.com
+sudo ln -s /etc/nginx/sites-available/vpn-support /etc/nginx/sites-enabled/
 sudo nginx -t && sudo systemctl reload nginx
 sudo certbot --nginx -d your-domain.com
 ```
