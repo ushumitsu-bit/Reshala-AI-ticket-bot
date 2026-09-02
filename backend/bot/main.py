@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-TrueTunnel Support — модульный Telegram бот
+S-Access Support — модульный Telegram бот
 Точка входа: запуск бота с конфигурацией из MongoDB
 """
 import os
@@ -122,7 +122,7 @@ def main():
     logger.info("Registered dispatch_message handler for private chats")
     application.add_handler(MessageHandler(support_content, dispatch_message))
 
-    logger.info("TrueTunnel Support — бот запущен")
+    logger.info("S-Access Support — бот запущен")
     application.run_polling(allowed_updates=["message", "callback_query"])
 
 

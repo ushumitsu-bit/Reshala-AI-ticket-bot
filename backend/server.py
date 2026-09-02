@@ -17,6 +17,7 @@ from exception_handlers import add_exception_handlers
 
 # Database Indexes
 from database.indexes import ensure_indexes
+from utils.db_config import get_settings
 from services.kb_distiller import run_distillation_once
 from apscheduler.schedulers.background import BackgroundScheduler
 
@@ -27,6 +28,7 @@ logger = logging.getLogger(__name__)
 
 MONGO_URL = os.environ.get("MONGO_URL")
 DB_NAME = os.environ.get("DB_NAME", "reshala_support")
+SERVICE_NAME = os.environ.get("SERVICE_NAME", "S-Access Support")
 
 client = MongoClient(MONGO_URL)
 db = client[DB_NAME]
@@ -35,7 +37,7 @@ db = client[DB_NAME]
 def init_default_settings():
     if db.settings.count_documents({}) == 0:
         db.settings.insert_one({
-            "service_name": "Решала support",
+            "service_name": "S-Access Support",
             "bot_token": "",
             "remnawave_api_url": "",
             "remnawave_api_token": "",
@@ -84,14 +86,14 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.error(f"Failed to start KB distiller: {e}")
 
-    logger.info("TrueTunnel Support - Backend started")
+    logger.info(f"{SERVICE_NAME} - Backend started")
     yield
     if scheduler:
         scheduler.shutdown(wait=False)
     client.close()
 
 
-app = FastAPI(title="TrueTunnel Support", lifespan=lifespan)
+app = FastAPI(title=SERVICE_NAME, lifespan=lifespan)
 
 # Rate Limiter Setup
 app.state.limiter = limiter
@@ -138,8 +140,13 @@ def health():
     except Exception:
         db_status = "disconnected"
         
+    try:
+        service = get_settings().get("service_name") or SERVICE_NAME
+    except Exception:
+        service = SERVICE_NAME
+
     return {
-        "status": "ok", 
-        "service": "TrueTunnel Support",
+        "status": "ok",
+        "service": service,
         "database": db_status
     }

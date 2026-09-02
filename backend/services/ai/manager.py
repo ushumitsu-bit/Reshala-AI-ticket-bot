@@ -29,6 +29,7 @@ class AIProviderManager:
 
     def __init__(self, db):
         self.db = db
+        self._temperature = 0.3
 
     def get_providers(self) -> List[Dict]:
         return list(self.db.ai_providers.find({}, {"_id": 0}))
@@ -177,6 +178,10 @@ class AIProviderManager:
 
     def chat(self, messages: List[Dict], provider_name: Optional[str] = None) -> Optional[str]:
         settings = self.db.settings.find_one({}, {"_id": 0})
+        try:
+            self._temperature = float((settings or {}).get("ai_temperature", 0.3))
+        except (TypeError, ValueError):
+            self._temperature = 0.3
         name = provider_name or (settings.get("active_provider") if settings else "groq")
         provider = self.get_provider(name)
         if not provider or not provider.get("enabled"):
@@ -330,7 +335,7 @@ class AIProviderManager:
     def _call_openai_compat(self, base_url: str, key: str, model: str, messages: List[Dict], proxies=None) -> Optional[str]:
         url = f"{base_url}/chat/completions"
         headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
-        payload = {"model": model, "messages": messages, "temperature": 0.7, "max_tokens": 2048}
+        payload = {"model": model, "messages": messages, "temperature": self._temperature, "max_tokens": 2048}
         try:
             r = requests.post(url, json=payload, headers=headers, timeout=60, proxies=proxies)
         except requests.exceptions.RequestException as e:
@@ -359,7 +364,7 @@ class AIProviderManager:
         if not chat_messages:
             return None
         headers = {"x-api-key": key, "anthropic-version": "2023-06-01", "Content-Type": "application/json"}
-        payload = {"model": model, "max_tokens": 2048, "messages": chat_messages}
+        payload = {"model": model, "max_tokens": 2048, "temperature": self._temperature, "messages": chat_messages}
         if system_parts:
             payload["system"] = "\n\n".join(system_parts)
         r = requests.post("https://api.anthropic.com/v1/messages", json=payload, headers=headers, timeout=60, proxies=proxies)
@@ -388,19 +393,25 @@ class AIProviderManager:
             contents.append({"role": gemini_role, "parts": [{"text": content}]})
         if not contents:
             return None
-        payload = {"contents": contents, "generationConfig": {"temperature": 0.7, "maxOutputTokens": 2048}}
+        gen_cfg = {"temperature": self._temperature, "maxOutputTokens": 4096}
+        # Gemini 3.x flash — thinking-модели: держим размышления короткими,
+        # иначе весь бюджет уходит в "мысли" и text приходит пустым.
+        if "gemini-3" in model or model.endswith("flash-latest"):
+            gen_cfg["thinkingConfig"] = {"thinkingLevel": "low"}
+        payload = {"contents": contents, "generationConfig": gen_cfg}
         if system_parts:
             payload["systemInstruction"] = {"parts": [{"text": "\n\n".join(system_parts)}]}
         url = f"{base_url}/models/{model}:generateContent"
         headers = {"Content-Type": "application/json", "x-goog-api-key": key}
-        r = requests.post(url, headers=headers, json=payload, timeout=30)
+        r = requests.post(url, headers=headers, json=payload, timeout=60)
         if r.status_code == 200:
             data = r.json()
             candidates = data.get("candidates", [])
             if candidates:
                 parts = candidates[0].get("content", {}).get("parts", [])
-                if parts:
-                    return parts[0].get("text", "").strip()
+                text = "".join(p.get("text", "") for p in parts if isinstance(p, dict)).strip()
+                if text:
+                    return text
         if r.status_code in (429, 403):
             raise Exception(f"Key limit/auth error: {r.status_code}")
         logger.warning(f"Google {model}: {r.status_code} {r.text[:200]}")

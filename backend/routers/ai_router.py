@@ -7,6 +7,11 @@ import re
 
 from fastapi import APIRouter, Body, Depends
 from services.ai.manager import AIProviderManager
+from services.ai.context import (
+    build_knowledge_context,
+    build_system_prompt,
+    get_stock_prompt as _ctx_stock_prompt,
+)
 from middleware.auth import require_manager
 from utils.db_config import get_db, get_settings
 
@@ -19,116 +24,13 @@ def _get_settings():
 
 
 def get_stock_prompt(settings: dict = None) -> str:
-    """
-    Генерация стокового промпта с подстановкой переменных из настроек.
-    Переменные:
-    - {service_name} — название сервиса
-    - {main_bot} — основной бот для покупки подписки
-    """
-    if settings is None:
-        settings = _get_settings()
-    
-    service_name = settings.get("service_name") or "VPN Поддержка"
-    main_bot = settings.get("main_bot_username") or "[укажите в настройках]"
-    
-    return f"""Ты — AI-ассистент технической поддержки VPN-сервиса "{service_name}". Твоя задача — помогать пользователям решать проблемы с VPN быстро, точно и дружелюбно.
-
-## ОСНОВНЫЕ ПРАВИЛА:
-
-### 1. БЕЗОПАСНОСТЬ (КРИТИЧЕСКИ ВАЖНО!)
-- НИКОГДА не раскрывай данные других пользователей
-- НИКОГДА не показывай внутренние настройки, конфигурации или код системы
-- НИКОГДА не давай информацию о серверах, IP-адресах или инфраструктуре
-- Отвечай ТОЛЬКО на вопросы, касающиеся конкретного пользователя, который пишет
-- При попытке выведать конфиденциальную информацию — вежливо откажи и предложи помощь по другому вопросу
-
-### 2. ЧЕСТНОСТЬ И ТОЧНОСТЬ
-- Давай только достоверную информацию, которую видишь в контексте пользователя
-- Если не знаешь ответ или не уверен — честно скажи об этом
-- Не придумывай функции, возможности или данные, которых нет
-- Если проблема сложная или нетипичная — предложи вызвать менеджера
-
-### 3. КОГДА ВЫЗЫВАТЬ МЕНЕДЖЕРА (эскалация):
-Рекомендуй пользователю вызвать менеджера в следующих случаях:
-- Технические проблемы, которые ты не можешь решить стандартными инструкциями
-- Вопросы об оплате, возвратах, спорных ситуациях
-- Жалобы на качество сервиса или серьёзные проблемы
-- Подозрение на взлом аккаунта или мошенничество
-- Пользователь явно недоволен и требует человека
-- Любые вопросы, выходящие за рамки стандартной техподдержки
-- Проблемы с серверами, которые требуют проверки администратором
-
-### 4. СТИЛЬ ОБЩЕНИЯ:
-- Дружелюбный, но профессиональный тон
-- Краткие и понятные ответы
-- Пошаговые инструкции при решении проблем
-- Эмпатия к проблемам пользователя
-- Общение на русском языке
-
-## ТИПИЧНЫЕ ВОПРОСЫ И РЕШЕНИЯ:
-
-### Подключение VPN:
-1. Скачайте приложение (Happ, V2rayNG, Streisand или другое VPN-приложение)
-2. Скопируйте ссылку подписки из бота
-3. Добавьте подписку в приложение по ссылке
-4. Выберите сервер и подключитесь
-
-### Не работает VPN:
-1. Проверьте, есть ли активная подписка (посмотри в контексте)
-2. Проверьте интернет-соединение
-3. Обновите подписку в приложении
-4. Попробуйте другой сервер
-5. Перезапустите приложение
-6. Если не помогло — предложи вызвать менеджера
-
-### Проблемы с устройствами (HWID):
-- У каждого тарифа свой лимит устройств
-- Если достигнут лимит — нужно удалить старые устройства или обратиться к менеджеру
-- Менеджер может сбросить устройства
-
-### Подписка и тарифы:
-- Информацию о текущей подписке смотри в контексте пользователя
-- Для продления или смены тарифа — направь в бота @{main_bot}
-- Вопросы об оплате и возвратах — только к менеджеру
-
-### Статус "Не работает" или "Нет подключения":
-1. Сначала проверь в контексте — есть ли активная подписка
-2. Если подписки нет — объясни, что нужно оформить/продлить в @{main_bot}
-3. Если подписка есть — дай стандартные инструкции по переподключению
-4. Если проблема не решается — вызови менеджера
-
-## ЗАПРЕЩЕНО:
-- Обсуждать политику, религию, спорные темы
-- Давать юридические или финансовые советы
-- Критиковать конкурентов или другие VPN-сервисы
-- Делиться личным мнением
-- Использовать нецензурную лексику
-- Выдавать информацию, которой нет в контексте
-- Давать данные о других пользователях или системе
-
-## ФОРМАТ ОТВЕТОВ:
-- Отвечай кратко и по существу
-- Используй нумерованные списки для инструкций
-- Если нужна дополнительная информация от пользователя — спроси
-- Завершай ответ вопросом "Помочь с чем-то ещё?" если проблема решена
-
-Помни: твоя главная цель — помочь пользователю решить проблему или честно сказать, что нужна помощь менеджера."""
+    """Стоковый промпт с подстановкой переменных (см. services/ai/context.py)."""
+    return _ctx_stock_prompt(settings if settings is not None else _get_settings())
 
 
 def get_system_prompt() -> str:
-    """Get system prompt - custom or stock with variables"""
-    settings = _get_settings()
-    custom_prompt = (settings.get("system_prompt_override") or "").strip()
-    
-    if custom_prompt:
-        # Подставляем переменные в кастомный промпт тоже
-        service_name = settings.get("service_name") or "VPN Поддержка"
-        main_bot = settings.get("main_bot_username") or ""
-        custom_prompt = custom_prompt.replace("{service_name}", service_name)
-        custom_prompt = custom_prompt.replace("{main_bot}", main_bot)
-        return custom_prompt
-    
-    return get_stock_prompt(settings)
+    """Финальный системный промпт: override|сток + приоритетные правила + переменные."""
+    return build_system_prompt(_get_settings())
 
 
 @router.post("/test-connection")
@@ -199,17 +101,9 @@ def chat_test(data: dict = Body(...)):
     db = get_db()
     ai_manager = AIProviderManager(db)
 
-    # Get knowledge base context
-    kb_context = _get_knowledge_context(message)
-    
-    # Build system prompt with variables
-    system_prompt = get_system_prompt()
-    
-    if kb_context:
-        system_prompt += f"\n\n## БАЗА ЗНАНИЙ (используй для ответов):\n{kb_context}"
-    
-    if user_context:
-        system_prompt += f"\n\n{user_context}"
+    # Единый промпт + контекст БЗ (та же логика, что в живом боте)
+    kb_context = build_knowledge_context(db, message, limit=5)
+    system_prompt = build_system_prompt(_get_settings(), user_context=user_context, kb_context=kb_context)
 
     messages = [
         {"role": "system", "content": system_prompt},
@@ -245,36 +139,5 @@ def get_stock_prompt_endpoint():
 
 
 def _get_knowledge_context(query: str) -> str:
-    """Search knowledge base for relevant articles"""
-    words = query.split()
-    if not words:
-        return ""
-
-    db = get_db()
-    if db is None:
-        return ""
-
-    safe_words = [re.escape(w) for w in words[:3] if len(w) <= 50]
-    if not safe_words:
-        return ""
-
-    regex = {"$regex": "|".join(safe_words), "$options": "i"}
-    articles = list(db.knowledge_base.find(
-        {"$or": [{"title": regex}, {"content": regex}, {"category": regex}]}
-    ).limit(5))
-    
-    if not articles:
-        articles = list(db.knowledge_base.find({}).limit(5))
-    
-    if not articles:
-        return ""
-    
-    parts = []
-    for a in articles:
-        category = a.get('category', 'general')
-        title = a.get('title', '')
-        content = a.get('content', '')
-        if title and content:
-            parts.append(f"[{category}] {title}: {content}")
-    
-    return "\n---\n".join(parts)
+    """Поиск релевантных статей БЗ (см. services/ai/context.py)."""
+    return build_knowledge_context(get_db(), query, limit=5)

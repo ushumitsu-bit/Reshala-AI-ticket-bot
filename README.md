@@ -1,4 +1,4 @@
-# TrueTunnel Support
+# S-Access Support
 
 AI-ассистент технической поддержки для VPN-сервиса на базе **Remnawave** и биллинга
 **Bedolaga**. Бот принимает обращения клиентов в личке, отвечает через AI по базе знаний,
@@ -62,7 +62,7 @@ docker compose ps    # должны быть healthy/running все 4 конте
 
 ```bash
 curl -s http://localhost:8001/api/health
-# {"status":"ok","service":"TrueTunnel Support","database":"connected"}
+# {"status":"ok","service":"S-Access Support","database":"connected"}
 ```
 
 ---

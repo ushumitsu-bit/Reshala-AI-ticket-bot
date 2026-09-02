@@ -1,5 +1,5 @@
 """
-Обработчик поиска пользователей — TrueTunnel Support
+Обработчик поиска пользователей — S-Access Support
 Ищет по Telegram ID, short UUID, username
 """
 import re

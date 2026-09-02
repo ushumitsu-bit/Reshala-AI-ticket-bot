@@ -1,4 +1,4 @@
-# 📚 Документация API TrueTunnel Support
+# 📚 Документация API S-Access Support
 
 ## 🔗 Базовый URL
 - **Локально:** `http://localhost:8001`

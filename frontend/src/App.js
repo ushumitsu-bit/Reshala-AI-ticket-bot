@@ -52,6 +52,7 @@ function App() {
       const r = await fetch(`${API}/api/settings`, { headers });
       const data = await r.json();
       setSettings(data);
+      if (data?.service_name) document.title = data.service_name;
       return data;
     } catch (e) {
       console.error('Settings fetch error:', e);

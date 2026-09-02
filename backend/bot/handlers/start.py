@@ -1,5 +1,5 @@
 """
-Обработчики /start и /help — TrueTunnel Support
+Обработчики /start и /help — S-Access Support
 """
 import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo, MenuButtonWebApp, MenuButtonCommands
@@ -19,7 +19,7 @@ def _check_access(user_id):
 async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     config = get_settings()
-    service_name = config.get("service_name", "Решала support")
+    service_name = config.get("service_name", "S-Access Support")
     mini_app_url = config.get("miniapp_url", "")
     allowed_managers = config.get("allowed_manager_ids", [])
     
@@ -49,8 +49,7 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Менеджер
     manager_text = (
-        f"<b>TrueTunnel Support</b>\n\n"
-        f"Сервис: {service_name}\n\n"
+        f"<b>{service_name}</b>\n\n"
         "Отправьте Telegram ID или username пользователя для поиска.\n\n"
         "💡 <b>Все настройки теперь доступны только в Mini App.</b>\n"
     )
@@ -125,9 +124,10 @@ async def help_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     mini_app_url = config.get("miniapp_url") or (f"https://{config.get('mini_app_domain')}" if config.get("mini_app_domain") else "")
+    service_name = config.get("service_name", "S-Access Support")
 
     text = (
-        "<b>Справка — TrueTunnel Support</b>\n\n"
+        f"<b>Справка — {service_name}</b>\n\n"
         "<b>Поиск:</b> Отправьте Telegram ID или username\n\n"
         "<b>Команды:</b>\n"
         "/start — Начать\n"

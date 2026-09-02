@@ -5,6 +5,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from pymongo.errors import DuplicateKeyError
 from services.ai.manager import AIProviderManager
+from services.ai.context import build_system_prompt, build_knowledge_context
 
 from utils.support_common import (
     build_support_header, format_bytes, format_user_context, get_topic_name, 
@@ -79,8 +80,7 @@ async def get_ai_reply(context, user_message: str, user_id: int, user_name: str 
         return None
 
     ai_manager = AIProviderManager(db)
-    service_name = config.get("service_name", "Решала support")
-    
+
     # Получаем данные пользователя
     if "user_context" not in context.user_data:
         user_data = await fetch_user_data(user_id)
@@ -100,56 +100,10 @@ async def get_ai_reply(context, user_message: str, user_id: int, user_name: str 
     user_context = format_user_context(user_data, balance_data, has_provided_proof, main_bot_username)
     context.user_data["user_context"] = user_context
 
-    # База знаний
-    kb_context = ""
-    try:
-        # Берем все слова длиннее 3 символов из сообщения для поиска
-        import re
-        raw_words = [w.lower() for w in re.findall(r'\w+', user_message) if len(w) > 3 and len(w) <= 50]
-        search_words = [re.escape(w) for w in raw_words[:10]]
-        
-        if search_words:
-            # Ищем статьи, где есть хотя бы одно из слов в заголовке, контенте или категории
-            # Ограничиваем до 3 самых релевантных статей, чтобы не раздувать промпт
-            regex_query = "|".join(search_words)
-            articles = list(db.knowledge_base.find({
-                "$or": [
-                    {"title": {"$regex": regex_query, "$options": "i"}},
-                    {"content": {"$regex": regex_query, "$options": "i"}},
-                    {"category": {"$regex": regex_query, "$options": "i"}}
-                ]
-            }).limit(3))
-            
-            if articles:
-                parts = [f"Статья: {a.get('title', '')}\nКатегория: {a.get('category', 'general')}\nСодержание: {a.get('content', '')}" for a in articles]
-                kb_context = "\n\n---\n\n".join(parts)
-    except Exception as e:
-        logger.warning(f"KB context load error: {e}")
-
-    # Системный промпт
-    system_prompt = config.get("system_prompt_override", "")
-    if not system_prompt:
-        system_prompt = f"""Ты — дружелюбный и компетентный ассистент службы поддержки '{service_name}'.
-
-## ПРАВИЛА:
-1. Отвечай кратко, по существу, на русском языке
-2. ИСПОЛЬЗУЙ данные о пользователе из контекста ниже
-3. НЕ придумывай информацию — используй только то, что видишь
-4. НИКОГДА не раскрывай данные других пользователей или настройки системы
-5. Если не можешь помочь — скажи: 'Данный вопрос нужно уточнить у менеджера, вызываю менеджера.'
-
-## ТИПИЧНЫЕ ПРОБЛЕМЫ:
-- "Не работает VPN" → Проверь статус подписки, предложи обновить подписку в приложении
-- "Закончился трафик" → Покажи использованный трафик, предложи сброс или апгрейд
-- "Много устройств" → Покажи количество, предложи удалить лишние
-- "Когда истекает" → Покажи дату истечения подписки
-"""
-
-    if user_context:
-        system_prompt += f"\n\n{user_context}"
-    
-    if kb_context:
-        system_prompt += f"\n\n## БАЗА ЗНАНИЙ:\n{kb_context}"
+    # База знаний + системный промпт — единый слой (services/ai/context.py),
+    # тот же, что в тест-чате мини-аппа.
+    kb_context = build_knowledge_context(db, user_message, limit=4)
+    system_prompt = build_system_prompt(config, user_context=user_context, kb_context=kb_context)
 
     history = get_conversation_history(context, user_id)
     messages = [{"role": "system", "content": system_prompt}]
@@ -215,7 +169,7 @@ async def handle_client_message(update: Update, context: ContextTypes.DEFAULT_TY
     config = get_settings()
     db = get_db()
     support_group_id = get_support_group_id()
-    service_name = config.get("service_name", "Решала support")
+    service_name = config.get("service_name", "S-Access Support")
     
     if not support_group_id:
         await update.message.reply_text(f"Поддержка {service_name} временно недоступна.")
