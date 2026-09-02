@@ -336,6 +336,10 @@ class AIProviderManager:
         url = f"{base_url}/chat/completions"
         headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
         payload = {"model": model, "messages": messages, "temperature": self._temperature, "max_tokens": 2048}
+        # gpt-oss и подобные reasoning-модели: держим рассуждения короткими,
+        # иначе весь бюджет уходит в reasoning и content приходит пустым.
+        if "gpt-oss" in model or "reasoning" in model:
+            payload["reasoning_effort"] = "low"
         try:
             r = requests.post(url, json=payload, headers=headers, timeout=60, proxies=proxies)
         except requests.exceptions.RequestException as e:
