@@ -237,7 +237,15 @@ async def handle_client_message(update: Update, context: ContextTypes.DEFAULT_TY
                 }
                 thread_to_client[(support_group_id, thread_id)] = user_id
                 context.user_data["topic_id"] = thread_id
-        
+        elif thread_id:
+            # thread_id взят из памяти/persistence, но активного тикета в БД под ним нет
+            # (миграция группы, удалённый/закрытый тикет) — сбрасываем и создаём заново.
+            logger.warning(f"Stale topic {thread_id} for user {user_id} без активного тикета — пересоздаю")
+            topic_by_client.pop(user_id, None)
+            thread_to_client.pop((support_group_id, thread_id), None)
+            context.user_data.pop("topic_id", None)
+            thread_id = None
+
         if not thread_id:
             async with await _get_creation_lock(user_id):
                 existing_ticket = None

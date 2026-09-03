@@ -151,8 +151,28 @@ async def close_ticket_callback(update: Update, context: ContextTypes.DEFAULT_TY
             thread_to_client.pop((support_group_id, thread_id), None)
             
         await query.edit_message_reply_markup(reply_markup=None)
+    elif result.get("error") == "Ticket not found":
+        # Фантомный топик (миграция группы / потерянный тикет) — записи нет,
+        # но топик в группе висит. Закрываем его вручную по thread_id кнопки.
+        sg = get_support_group_id()
+        phantom_thread = getattr(query.message, "message_thread_id", None)
+        if sg and phantom_thread:
+            try:
+                await context.bot.close_forum_topic(chat_id=sg, message_thread_id=phantom_thread)
+            except Exception as e:
+                logger.warning(f"close phantom topic {phantom_thread}: {e}")
+            context.application.bot_data.get("support_thread_to_client", {}).pop((sg, phantom_thread), None)
+        try:
+            cid = int(ticket_id)
+            context.application.bot_data.get("support_topic_by_client", {}).pop(cid, None)
+        except (TypeError, ValueError):
+            pass
+        try:
+            await query.edit_message_reply_markup(reply_markup=None)
+        except Exception:
+            pass
+        await query.message.reply_text("Тикет в базе не найден (вероятно, уже закрыт). Топик закрыт.")
     else:
-        # Если тикет не найден или ошибка
         await query.message.reply_text(f"❌ Ошибка закрытия: {result.get('error')}")
 
 async def remove_ticket_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
