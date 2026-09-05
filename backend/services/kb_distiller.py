@@ -45,32 +45,47 @@ def scrub_pii(text: str) -> str:
     return text
 
 
-def _extract_keywords(text: str, limit: int = 6):
-    seen = []
-    for w in re.findall(r'\w+', text.lower()):
-        if len(w) > 3 and w not in seen:
-            seen.append(w)
-        if len(seen) >= limit:
-            break
-    return seen
-
-
 def _find_similar_articles(db, text: str):
-    keywords = [re.escape(w) for w in _extract_keywords(text)]
-    if not keywords:
-        return []
-    regex = {"$regex": "|".join(keywords), "$options": "i"}
+    """Ищет похожие статьи тем же движком, что и живой бот (скоринг, префиксы,
+    синонимы) — чтобы методист видел реальные дубли и ставил action=update."""
     try:
-        articles = list(db.knowledge_base.find(
-            {"$or": [{"title": regex}, {"content": regex}, {"category": regex}]}
-        ).limit(3))
+        from services.ai.context import _tokens, SYNONYMS, _frag
+        toks = _tokens(text)
+        expanded = set(toks) | {SYNONYMS[t] for t in toks if t in SYNONYMS}
+        frags = [_frag(t) for t in expanded]
+        if not frags:
+            return []
+        rx = {"$regex": "|".join(frags), "$options": "i"}
+        cands = list(db.knowledge_base.find(
+            {"$or": [{"title": rx}, {"content": rx}, {"category": rx}, {"keywords": rx}]}
+        ).limit(200))
+        compiled = [re.compile(f, re.IGNORECASE) for f in frags]
+        scored = []
+        for a in cands:
+            ti = a.get("title") or ""
+            cat = a.get("category") or ""
+            kw = str(a.get("keywords") or "")
+            co = a.get("content") or ""
+            s = 0
+            for c in compiled:
+                if c.search(ti):
+                    s += 3
+                elif c.search(kw) or c.search(cat):
+                    s += 2
+                elif c.search(co):
+                    s += 1
+            if s:
+                scored.append((s, a))
+        scored.sort(key=lambda x: x[0], reverse=True)
+        return [
+            {"article_id": str(a.get("_id")), "title": a.get("title", ""),
+             "category": a.get("category", "general"),
+             "excerpt": (a.get("content") or "")[:400]}
+            for _, a in scored[:5]
+        ]
     except Exception as e:
         logger.warning(f"similar articles search failed: {e}")
         return []
-    return [
-        {"article_id": str(a.get("_id")), "title": a.get("title", ""), "category": a.get("category", "general")}
-        for a in articles
-    ]
 
 
 def _is_worth_learning(doc):
@@ -130,14 +145,21 @@ def parse_methodist_json(raw):
 
 
 def _build_prompt(transcript, similar):
-    similar_text = "\n".join(f"- [{a['article_id']}] {a['title']} ({a['category']})" for a in similar) or "нет"
+    similar_text = "\n\n".join(
+        f"- [{a['article_id']}] {a['title']} ({a['category']})\n  {a.get('excerpt', '')}"
+        for a in similar
+    ) or "нет"
     return f"""Проанализируй диалог поддержки и составь черновик статьи базы знаний.
 
 ПРАВИЛА:
 - Не включай персональные данные конкретного пользователя.
 - Если ответ менеджера выглядит неверным/небезопасным — should_add=false.
-- Если тема уже покрыта похожей статьёй — action="update" и target_article_id, либо should_add=false.
-- Пиши инструкцию кратко и по делу.
+- НЕ ПЛОДИ ДУБЛИ. Внимательно посмотри список «ПОХОЖИЕ СТАТЬИ» ниже (там дан отрывок
+  каждой). Если тема запроса хотя бы ЧАСТИЧНО совпадает с существующей статьёй —
+  ставь action="update" и target_article_id этой статьи, а в content дай
+  дополненный/исправленный текст. action="add" — ТОЛЬКО если тема полностью новая
+  и ни одна из похожих статей её не касается.
+- Пиши на русском, кратко и по делу, без markdown.
 
 ОЧИЩЕННЫЙ ТРАНСКРИПТ:
 {transcript}
